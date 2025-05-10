@@ -1,0 +1,35 @@
+body {
+  font-family: "Courier New", Courier, monospace;
+  background-color: #1e1e1e;
+  color: #f0f0f0;
+  text-align: center; /* Center all text within the body */
+}
+h1,
+h2 {
+  color: #dcdcdc;
+}
+.profile-pic {
+  border-radius: 135px; /* Round the corners of the image */
+  border: 5px solid #333; /* Optional: Add a subtle border to define the edge */
+  display: block; /* Allows margin: auto to work for centering */
+  margin: 10px auto; /* Center the image horizontally with some top/bottom margin */
+}
+.code-pic {
+  width: 50px; height: 50px;
+}
+
+.side-by-side {
+    display: inline-block;
+    width: 35%;
+    margin-right: 0%;
+}
+span.side-by-side {
+    color: #f0f0f0;
+    vertical-align: top;
+}
+
+.header {
+    color: #dcdcdc;
+    font-style: bold;
+    font-size: 200%;
+}
