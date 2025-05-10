@@ -3,6 +3,10 @@ body {
   background-color: #1e1e1e;
   color: #f0f0f0;
   text-align: center; /* Center all text within the body */
+  background-image: linear-gradient(to bottom right,#000000, #e74e31, #31546b, #323232); /* Left to right */
+  z-index: -1;
+  width: 100%;
+  height: 100%;
 }
 h1,
 h2 {
@@ -10,11 +14,16 @@ h2 {
 }
 .code-pic {
   width: 50px; height: 50px;
+  background-color: rgba(51, 51, 51, 0.6); /* Dark gray with 60% opacity */
+  padding: 5px;
+  border: 3px solid #1e1e1e;
+  border-radius: 45px;
+  margin-top: 5px; /* Add some space above the box */
 }
 .profile-pic {
   border-radius: 240px; /* Round the corners of the image */
-  border: 5px solid #333; /* Optional: Add a subtle border to define the edge */
-  display: block; /* Allows margin: auto to work for centering */
+  border: 5px solid #1e1e1e; /* Optional: Add a subtle border to define the edge */
+  display: block; /* Allows margin: auto to work for centesring */
   margin: 10px auto; /* Center the image horizontally with some top/bottom margin */
   width: 30%;
   height: auto;
@@ -39,4 +48,17 @@ h2 {
   font-style: bold;
   font-size: 120%;
 }
-
+.work-experience-box {
+    background-color: rgba(51, 51, 51, 0.6); /* Dark gray with 60% opacity */
+    padding: 20px; /* Add some padding inside the box */
+    border: 5px solid #1e1e1e;
+    border-radius: 45px; /* Optional: Round the corners of the box */
+    margin-top: 20px; /* Add some space above the box */
+}
+.greeting-box {
+    background-color: rgba(51, 51, 51, 0.6); /* Dark gray with 80% opacity */
+    padding: 20px; /* Add some padding inside the box */
+    border: 5px solid #1e1e1e;
+    border-radius: 45px;
+    margin-top: 20px; /* Add some space above the box */
+}
