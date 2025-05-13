@@ -86,39 +86,6 @@
                 return; // Stop the calculation
             }
 
-            // Here, you would send this data to your Python backend
-            // using fetch or similar, and then display the results.
-            // This is placeholder to show how the JS would interact with the result labels.
-            //  For example:
-            /*
-            fetch('/calculate', {  //  <---  This is where you'd send to your Flask route
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    numPhones,
-                    numWatches,
-                    numTablets,
-                    data,
-                    daysLeft,
-                    phonePayment
-                }),
-            })
-            .then(response => response.json())
-            .then(data => {
-                prorationResultLabel.textContent = `Proration Amount: $${data.proration}`;
-                finalBeforePhoneLabel.textContent = `Final Before Phone: $${data.final}`;
-                finalWithPhoneLabel.textContent = `Final with Phones: $${data.final_price_with_phones}`;
-                logMessageLabel.textContent = data.log_message; // show message from Python
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                logMessageLabel.textContent = "An error occurred. Please check the console.";
-            });
-            */
-
-            // Placeholder for demonstration:
             const linesCost = (numPhones * 20) + (numWatches * 10) + (numTablets * 10);
             const totalCost = linesCost + data;
             const costAfterDivision = totalCost / 31;
@@ -130,7 +97,7 @@
             prorationResultLabel.textContent = `Proration Amount: $${proration}`;
             finalBeforePhoneLabel.textContent = `Final Before Phone: $${final}`;
             finalWithPhoneLabel.textContent = `Final with Phones: $${finalPriceWithPhones}`;
-            logMessageLabel.textContent = "Results calculated (placeholder - no actual logging).";
+            logMessageLabel.textContent = "Results calculated.";
 
         });
     </script>
