@@ -23,72 +23,14 @@
             border-radius: 12px;
         }
         
-        /* --- Room List Styles --- */
-        #room-list-container {
-            margin-top: 20px;
-            border-top: 2px solid #f0f0f0;
-            padding-top: 15px;
-        }
-        .room-item {
-            background: #fff;
-            border: 1px solid #e0e0e0;
-            margin-bottom: 8px;
+        /* --- General Styles --- */
+        input {
+            width: 100%;
             padding: 12px;
-            border-radius: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        .room-info {
-            display: flex;
-            flex-direction: column;
-        }
-        .room-id {
-            font-weight: bold;
-            font-size: 1.1em;
-        }
-        .room-meta {
-            font-size: 0.8em;
-            color: #666;
-        }
-        
-        /* --- Game View Styles --- */
-        .player-counter {
-            background-color: #fff;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-        .life-section {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        .life-display {
-            text-align: center;
-        }
-        .life-total {
-            font-size: 2.5em;
-            font-weight: 800;
-            color: #2c3e50;
-            display: block;
-            line-height: 1;
-        }
-        .player-name {
-            font-size: 0.9em;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #7f8c8d;
-        }
-        
-        /* Controls */
-        .control-group {
-            display: flex;
-            gap: 5px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
         }
         button {
             cursor: pointer;
@@ -99,18 +41,6 @@
         }
         button:active {
             transform: scale(0.96);
-        }
-        .btn-life {
-            padding: 8px 12px;
-            font-size: 1em;
-            background-color: #3498db;
-            color: white;
-        }
-        .btn-damage {
-            padding: 4px 8px;
-            font-size: 0.9em;
-            background-color: #e74c3c;
-            color: white;
         }
         .btn-primary {
             width: 100%;
@@ -133,8 +63,46 @@
             padding: 8px;
             margin-left: 5px;
         }
-
-        /* Damage Section */
+        
+        /* --- Game View Styles --- */
+        .player-counter {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .life-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .life-total {
+            font-size: 2.5em;
+            font-weight: 800;
+            color: #2c3e50;
+        }
+        .player-name-display {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .cmd-name {
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+        .btn-life {
+            padding: 8px 12px;
+            font-size: 1em;
+            background-color: #3498db;
+            color: white;
+        }
+        .btn-damage {
+            padding: 4px 8px;
+            font-size: 0.9em;
+            background-color: #e74c3c;
+            color: white;
+        }
         .damage-section {
             background-color: #f9f9f9;
             padding: 10px;
@@ -149,25 +117,61 @@
             padding-bottom: 8px;
             border-bottom: 1px solid #eee;
         }
-        .damage-row:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-            padding-bottom: 0;
+        .control-group {
+            display: flex;
+            gap: 5px;
         }
-        
-        input {
-            width: 100%;
-            padding: 12px;
+
+        /* --- Lobby Features --- */
+        #lobby-features button {
+            background-color: #2980b9;
+            color: white;
+            width: 48%;
+            padding: 10px;
             margin-bottom: 10px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            box-sizing: border-box;
+        }
+        #lobby-features {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 5px;
+            margin-top: 10px;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+        #roll-result {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-left: 10px;
         }
         
-        #status-message {
+        /* --- Modal for Card Search --- */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        #search-results img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
             margin-top: 15px;
-            font-size: 0.9em;
-            color: #666;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -179,6 +183,16 @@
 
     <p id="status-message">Initializing...</p>
 
+    <div id="card-search-modal" class="modal">
+        <div class="modal-content">
+            <h3>Card Search (Scryfall)</h3>
+            <input type="text" id="modal-card-name" placeholder="Enter card name">
+            <button id="modal-search-btn" class="btn-primary">Search</button>
+            <div id="search-results"></div>
+            <button id="modal-close-btn" class="btn-danger">Close</button>
+        </div>
+    </div>
+    
     <script type="module">
         // ----------------------------------------------------------------------
         // 1. CONFIGURATION
@@ -191,13 +205,15 @@
             messagingSenderId: "36730058988",
             appId: "1:36730058988:web:757e2d9620593b4f65022a"
         };
+        const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
+        const TIMEOUT_MINUTES = 25; 
         
         // ----------------------------------------------------------------------
         // 2. IMPORTS
         // ----------------------------------------------------------------------
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp, collection, getDocs, query, limit, deleteDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp, collection, getDocs, query, limit, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ----------------------------------------------------------------------
         // 3. GLOBALS
@@ -210,7 +226,6 @@
         let roomId = null;
         let unsubscribe = null;
         const ROOM_COLLECTION = "mtg_rooms";
-        const TIMEOUT_MINUTES = 25; 
 
         // ----------------------------------------------------------------------
         // 4. HELPERS
@@ -224,76 +239,82 @@
             if (lastActive) {
                 const elapsed = (new Date() - lastActive) / (1000 * 60);
                 if (elapsed > TIMEOUT_MINUTES) {
-                    console.log(`Deleting expired room: ${id}`);
                     try { await deleteDoc(doc(db, ROOM_COLLECTION, id)); } catch(e){}
                     return true;
                 }
             }
             return false;
         }
+        
+        function getStartingLife() {
+            return 40; 
+        }
 
         // ----------------------------------------------------------------------
         // 5. GAME LOGIC & RENDERING
         // ----------------------------------------------------------------------
-
+        
         function renderRoomView(roomData) {
             const appContainer = document.getElementById("app-container");
             const statusMessage = document.getElementById("status-message");
 
-            statusMessage.innerHTML = `Connected as: <strong>${userId.substring(0,6)}</strong>`;
+            statusMessage.innerHTML = `Connected as: <strong>${roomData.players[userId]?.name || 'You'}</strong>`;
             
             let html = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                     <h2 style="margin:0;">Room: ${roomId}</h2>
-                    <button id="refresh-btn" class="btn-secondary">↻</button>
+                    <div style="display:flex; gap:10px;">
+                        <button id="delete-room-btn" class="btn-danger" style="width:auto; padding: 5px 10px;">Delete Room</button>
+                        <button id="refresh-btn" class="btn-secondary" style="width:auto; padding: 5px 10px;">↻</button>
+                    </div>
                 </div>
             `;
             
             const playerIds = Object.keys(roomData.players);
-
-            // Sort players: Put current user first, then others
             playerIds.sort((a, b) => (a === userId ? -1 : b === userId ? 1 : 0));
+
+            html += `<h3 style="margin-top:0;">Players</h3>`;
 
             playerIds.forEach(playerId => {
                 const player = roomData.players[playerId];
                 const isMe = playerId === userId;
                 
-                // LIFE SECTION
+                // --- Life Section ---
                 let lifeControls = '';
                 if (isMe) {
                     lifeControls = `
                         <div class="control-group">
-                            <button class="btn-life" data-pid="${playerId}" data-type="life" data-val="-1">-1</button>
-                            <button class="btn-life" data-pid="${playerId}" data-type="life" data-val="-5">-5</button>
-                            <button class="btn-life" data-pid="${playerId}" data-type="life" data-val="+1">+1</button>
-                            <button class="btn-life" data-pid="${playerId}" data-type="life" data-val="+5">+5</button>
+                            <button class="btn-life" data-type="life" data-val="-1">-1</button>
+                            <button class="btn-life" data-type="life" data-val="-5">-5</button>
+                            <button class="btn-life" data-type="life" data-val="+1">+1</button>
+                            <button class="btn-life" data-type="life" data-val="+5">+5</button>
                         </div>
                     `;
                 }
 
-                // DAMAGE SECTION
+                // --- Commander Damage Section ---
                 let damageRows = '';
                 const opponents = playerIds.filter(id => id !== playerId);
                 
                 if (opponents.length > 0) {
                     damageRows = `<div class="damage-section"><h4 style="margin:0 0 10px 0; font-size:0.9em; color:#555;">Commander Damage Taken</h4>`;
                     opponents.forEach(oppId => {
+                        const opp = roomData.players[oppId];
                         const dmg = player.commanderDamage?.[oppId] || 0;
                         let dmgControls = '';
                         
-                        // Only show controls if I am the player taking damage
                         if (isMe) {
                             dmgControls = `
                                 <div class="control-group">
-                                    <button class="btn-damage" data-pid="${playerId}" data-opp="${oppId}" data-type="cmd" data-val="-1">-</button>
-                                    <button class="btn-damage" data-pid="${playerId}" data-opp="${oppId}" data-type="cmd" data-val="+1">+</button>
+                                    <button class="btn-damage" data-opp="${oppId}" data-val="-1">-</button>
+                                    <button class="btn-damage" data-opp="${oppId}" data-val="+1">+</button>
                                 </div>
                             `;
                         }
                         
                         damageRows += `
                             <div class="damage-row">
-                                <span style="font-size:0.9em;">vs ${oppId.substring(0,4)}...</span>
+                                <span style="font-size:0.9em;">From **${opp.name}** [${opp.commander || 'N/A'}]</span>
                                 <div style="display:flex; align-items:center; gap:10px;">
                                     <strong style="color:${dmg >= 21 ? 'red' : 'black'}">${dmg}</strong>
                                     ${dmgControls}
@@ -308,7 +329,8 @@
                     <div class="player-counter" style="${isMe ? 'border: 2px solid #3498db;' : ''}">
                         <div class="life-section">
                             <div class="life-display">
-                                <span class="player-name">${isMe ? 'YOU' : 'OPPONENT'} (${playerId.substring(0,4)})</span>
+                                <div class="player-name-display">${isMe ? 'YOU' : player.name}</div>
+                                <div class="cmd-name">[${player.commander || 'N/A'}]</div>
                                 <span class="life-total">${player.life}</span>
                             </div>
                             ${lifeControls}
@@ -317,26 +339,31 @@
                     </div>
                 `;
             });
+            
+            // --- Lobby Features ---
+            html += `
+                <div id="lobby-features">
+                    <h3 style="width:100%; margin-bottom: 5px;">Game Tools</h3>
+                    <button id="roll-dice-btn">Roll D20</button>
+                    <div id="roll-result" style="width:40%; text-align:center;">-</div>
+                    <button id="turn-order-btn">Determine Turn Order</button>
+                    <button id="card-search-btn">Card Search</button>
+                </div>
+                <button id="leave-room-btn" class="btn-danger">Leave Room</button>
+            `;
 
-            html += `<button id="leave-room-btn" class="btn-danger">Leave Room</button>`;
             appContainer.innerHTML = html;
             
-            // --- FIX: ATTACH LISTENERS AFTER HTML IS INJECTED ---
-            
-            // Life Buttons
+            // --- ATTACH LISTENERS ---
             document.querySelectorAll('.btn-life').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    const delta = parseInt(e.target.dataset.val);
-                    updateLife(delta);
+                    updateLife(parseInt(e.target.dataset.val));
                 });
             });
 
-            // Commander Damage Buttons
             document.querySelectorAll('.btn-damage').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    const oppId = e.target.dataset.opp;
-                    const delta = parseInt(e.target.dataset.val);
-                    updateCmdDamage(oppId, delta);
+                    updateCmdDamage(e.target.dataset.opp, parseInt(e.target.dataset.val));
                 });
             });
 
@@ -347,11 +374,62 @@
             });
             
             document.getElementById('refresh-btn').addEventListener('click', () => {
-                // Manual refresh in case of desync
                 if(roomId) listenToRoom(roomId);
             });
+
+            document.getElementById('delete-room-btn').addEventListener('click', () => {
+                if(confirm("Are you sure you want to delete this room for ALL players?")) {
+                    deleteRoom(roomId);
+                }
+            });
+
+            document.getElementById('roll-dice-btn').addEventListener('click', () => {
+                const roll = Math.floor(Math.random() * 20) + 1;
+                document.getElementById('roll-result').textContent = roll;
+            });
+            
+            document.getElementById('turn-order-btn').addEventListener('click', () => {
+                determineTurnOrder(roomData.players);
+            });
+            
+            document.getElementById('card-search-btn').addEventListener('click', () => {
+                document.getElementById('card-search-modal').style.display = 'flex';
+                document.getElementById('modal-card-name').value = '';
+                document.getElementById('search-results').innerHTML = '';
+            });
+        }
+        
+        function determineTurnOrder(players) {
+            const playerNames = Object.values(players).map(p => p.name || 'Unknown Player');
+            
+            if (playerNames.length < 2) {
+                alert("Need at least two players to determine turn order.");
+                return;
+            }
+
+            // Simple shuffle algorithm (Fisher-Yates)
+            for (let i = playerNames.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [playerNames[i], playerNames[j]] = [playerNames[j], playerNames[i]];
+            }
+            
+            const orderText = `Turn Order:\n1. ${playerNames[0]}\n2. ${playerNames[1]}${playerNames[2] ? `\n3. ${playerNames[2]}` : ''}\n...`;
+            alert(orderText);
         }
 
+        async function deleteRoom(id) {
+            if (!id) return;
+            try {
+                await deleteDoc(doc(db, ROOM_COLLECTION, id));
+                if(unsubscribe) unsubscribe();
+                roomId = null;
+                renderSetupView();
+            } catch (e) {
+                alert("Failed to delete room. Check console for details.");
+                console.error("Delete room failed:", e);
+            }
+        }
+        
         // --- DATA UPDATES ---
 
         async function updateLife(delta) {
@@ -361,7 +439,7 @@
                 const snap = await getDoc(ref);
                 if (snap.exists()) {
                     const data = snap.data();
-                    const cur = data.players[userId]?.life ?? 40;
+                    const cur = data.players[userId]?.life ?? getStartingLife();
                     
                     await setDoc(ref, {
                         players: { [userId]: { life: cur + delta } },
@@ -371,6 +449,7 @@
             } catch(e) { console.error(e); }
         }
 
+        // FIX: Commander damage update logic corrected
         async function updateCmdDamage(oppId, delta) {
             if (!roomId || !userId) return;
             const ref = doc(db, ROOM_COLLECTION, roomId);
@@ -378,14 +457,14 @@
                 const snap = await getDoc(ref);
                 if (snap.exists()) {
                     const data = snap.data();
-                    const cur = data.players[userId]?.commanderDamage?.[oppId] ?? 0;
+                    const cur = data.players?.[userId]?.commanderDamage?.[oppId] ?? 0;
                     const newVal = Math.max(0, cur + delta);
 
-                    // Firestore dot notation for nested map update
+                    // CORRECT PATH USAGE: players.[userId].commanderDamage.[oppId]
                     const fieldPath = `players.${userId}.commanderDamage.${oppId}`;
                     
                     await setDoc(ref, {
-                        [fieldPath]: newVal, // Using computed property name
+                        [fieldPath]: newVal,
                         lastActive: serverTimestamp()
                     }, { merge: true });
                 }
@@ -394,14 +473,121 @@
 
         // --- SETUP & LIST VIEWS ---
 
+        // MODIFIED: Added playerName and commanderName to the prompt
+        function promptPassword(rid, mode) {
+            const appContainer = document.getElementById("app-container");
+            const title = mode === 'join' ? `Join ${rid}` : `Create ${rid}`;
+            const btnText = mode === 'join' ? "Enter Game" : "Create Room";
+            
+            appContainer.innerHTML = `
+                <h2>${title}</h2>
+                <input type="text" id="player-name-input" placeholder="Your Player Name">
+                <input type="text" id="commander-input" placeholder="Your Commander's Name (e.g., Urza)">
+                <input type="password" id="pwd-input" placeholder="Room Password">
+                <button id="action-btn" class="btn-primary">${btnText}</button>
+                <button id="cancel-btn" class="btn-danger">Cancel</button>
+                <p id="err-msg" style="color:red"></p>
+            `;
+            
+            document.getElementById("cancel-btn").onclick = renderSetupView;
+            
+            document.getElementById("action-btn").onclick = async () => {
+                const name = document.getElementById("player-name-input").value.trim();
+                const commander = document.getElementById("commander-input").value.trim();
+                const pwd = document.getElementById("pwd-input").value;
+                if(!name || !pwd) return;
+                
+                if (mode === 'join') {
+                    // ... (Join Logic remains the same, passing new data to joinRoom)
+                    const ref = doc(db, ROOM_COLLECTION, rid);
+                    const snap = await getDoc(ref);
+                    if(snap.exists()) {
+                        const data = snap.data();
+                        if(await checkAndDeleteIfExpired(rid, data)) {
+                            document.getElementById("err-msg").textContent = "Room expired and was deleted.";
+                            setTimeout(renderSetupView, 2000);
+                            return;
+                        }
+                        if(data.passwordHash === hashPassword(pwd)) {
+                            listenToRoom(rid, name, commander); // Pass name/cmd
+                        } else {
+                            document.getElementById("err-msg").textContent = "Wrong password.";
+                        }
+                    } else {
+                        document.getElementById("err-msg").textContent = "Room no longer exists.";
+                    }
+                } else {
+                    // Create logic
+                    if(pwd.length < 3) {
+                        document.getElementById("err-msg").textContent = "Password too short.";
+                        return;
+                    }
+                    createRoom(rid, pwd, name, commander); // Pass name/cmd
+                }
+            };
+        }
+
+        // MODIFIED: createRoom now accepts name and commander
+        async function createRoom(rid, pwd, name, commander) {
+            if(!userId) return;
+            const ref = doc(db, ROOM_COLLECTION, rid);
+            try {
+                await setDoc(ref, {
+                    ownerId: userId,
+                    passwordHash: hashPassword(pwd),
+                    createdAt: serverTimestamp(),
+                    lastActive: serverTimestamp(),
+                    players: {
+                        [userId]: { life: getStartingLife(), commanderDamage: {}, name: name, commander: commander }
+                    }
+                });
+                listenToRoom(rid);
+            } catch(e) {
+                console.error(e);
+            }
+        }
+        
+        // MODIFIED: listenToRoom now updates player name/commander if joining
+        function listenToRoom(rid, newName = null, newCommander = null) {
+            if(unsubscribe) unsubscribe();
+            const ref = doc(db, ROOM_COLLECTION, rid);
+            
+            unsubscribe = onSnapshot(ref, (snap) => {
+                if(snap.exists()) {
+                    roomId = rid;
+                    const data = snap.data();
+                    
+                    // If I am not in the player list, auto-join with provided data
+                    if(!data.players[userId]) {
+                        // This logic is triggered ONLY on the first load after password entry
+                        if (newName && newCommander) {
+                            setDoc(ref, {
+                                players: { [userId]: { life: getStartingLife(), commanderDamage: {}, name: newName, commander: newCommander } },
+                                lastActive: serverTimestamp()
+                            }, { merge: true });
+                        } else {
+                            // If re-joining without data (e.g., simple refresh), prompt for name/commander
+                            // For simplicity here, we'll just go back to setup
+                            renderSetupView();
+                            return;
+                        }
+                    }
+                    
+                    renderRoomView(data);
+                } else {
+                    renderSetupView();
+                }
+            });
+        }
+
         async function renderSetupView() {
+            // ... (Setup view logic remains largely the same) ...
             const appContainer = document.getElementById("app-container");
             const statusMessage = document.getElementById("status-message");
             roomId = null;
 
             statusMessage.textContent = "Browse rooms or create a new one.";
 
-            // 1. Fetch Rooms (FIXED: Simplified logic to ensure list renders)
             let listHtml = '<p>Loading active rooms...</p>';
             appContainer.innerHTML = `
                 <h2>MTG Lobby</h2>
@@ -425,15 +611,16 @@
                         const rData = docSnap.data();
                         const rId = docSnap.id;
                         const pCount = Object.keys(rData.players || {}).length;
-                        
-                        // We do NOT delete here to prevent blocking the UI.
-                        // We just list them. Deletion happens on join attempt.
+                        const ownerName = rData.players[rData.ownerId]?.name || 'Owner';
+
+                        // Player name and Commander name in the lobby list
+                        const ownerCmd = rData.players[rData.ownerId]?.commander || 'N/A';
                         
                         listHtml += `
                             <div class="room-item">
                                 <div class="room-info">
                                     <span class="room-id">${rId}</span>
-                                    <span class="room-meta">${pCount} Player(s)</span>
+                                    <span class="room-meta">${pCount} Player(s) | Owner: ${ownerName} [${ownerCmd}]</span>
                                 </div>
                                 <button class="join-btn btn-secondary" data-rid="${rId}">Join</button>
                             </div>
@@ -445,137 +632,70 @@
                 listHtml = `<p style="color:red">Error loading rooms. Permissions might be initializing...</p>`;
             }
 
-            // Update just the container part
             const listContainer = document.getElementById("room-list-container");
             if(listContainer) listContainer.innerHTML = listHtml;
 
             // --- ATTACH LISTENERS ---
             
-            // List Join Buttons
             if(listContainer) {
                 listContainer.querySelectorAll('.join-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
-                        const rid = e.target.dataset.rid;
-                        promptPassword(rid, 'join');
+                        promptPassword(e.target.dataset.rid, 'join');
                     });
                 });
             }
 
-            // Search/Create Button
-            const searchBtn = document.getElementById("search-btn");
-            if(searchBtn) {
-                searchBtn.addEventListener('click', async () => {
-                    const val = document.getElementById("search-input").value.trim().toLowerCase();
-                    if(!val) return;
-                    
-                    const ref = doc(db, ROOM_COLLECTION, val);
-                    const snap = await getDoc(ref);
-                    
-                    if(snap.exists()) {
-                        promptPassword(val, 'join');
-                    } else {
-                        promptPassword(val, 'create');
-                    }
-                });
-            }
-        }
-
-        function promptPassword(rid, mode) {
-            const appContainer = document.getElementById("app-container");
-            const title = mode === 'join' ? `Join ${rid}` : `Create ${rid}`;
-            const btnText = mode === 'join' ? "Enter Game" : "Create Room";
-            
-            appContainer.innerHTML = `
-                <h2>${title}</h2>
-                <p>${mode === 'create' ? 'Set a password for this room:' : 'Enter room password:'}</p>
-                <input type="password" id="pwd-input" placeholder="Password">
-                <button id="action-btn" class="btn-primary">${btnText}</button>
-                <button id="cancel-btn" class="btn-danger">Cancel</button>
-                <p id="err-msg" style="color:red"></p>
-            `;
-            
-            document.getElementById("cancel-btn").onclick = renderSetupView;
-            
-            document.getElementById("action-btn").onclick = async () => {
-                const pwd = document.getElementById("pwd-input").value;
-                if(!pwd) return;
+            document.getElementById("search-btn").onclick = async () => {
+                const val = document.getElementById("search-input").value.trim().toLowerCase();
+                if(!val) return;
                 
-                if (mode === 'join') {
-                    // Check logic
-                    const ref = doc(db, ROOM_COLLECTION, rid);
-                    const snap = await getDoc(ref);
-                    if(snap.exists()) {
-                        const data = snap.data();
-                        
-                        // Check expiry BEFORE joining
-                        if(await checkAndDeleteIfExpired(rid, data)) {
-                            document.getElementById("err-msg").textContent = "Room expired and was deleted.";
-                            setTimeout(renderSetupView, 2000);
-                            return;
-                        }
-
-                        if(data.passwordHash === hashPassword(pwd)) {
-                            listenToRoom(rid);
-                        } else {
-                            document.getElementById("err-msg").textContent = "Wrong password.";
-                        }
-                    } else {
-                        document.getElementById("err-msg").textContent = "Room no longer exists.";
-                    }
+                const snap = await getDoc(doc(db, ROOM_COLLECTION, val));
+                
+                if(snap.exists()) {
+                    promptPassword(val, 'join');
                 } else {
-                    // Create logic
-                    if(pwd.length < 3) {
-                        document.getElementById("err-msg").textContent = "Password too short.";
-                        return;
-                    }
-                    createRoom(rid, pwd);
+                    promptPassword(val, 'create');
                 }
             };
         }
 
-        async function createRoom(rid, pwd) {
-            if(!userId) return;
-            const ref = doc(db, ROOM_COLLECTION, rid);
+        // --- Card Search Modal Logic ---
+        document.getElementById('modal-close-btn').addEventListener('click', () => {
+            document.getElementById('card-search-modal').style.display = 'none';
+        });
+        
+        document.getElementById('modal-search-btn').addEventListener('click', async () => {
+            const cardName = document.getElementById('modal-card-name').value.trim();
+            const resultsDiv = document.getElementById('search-results');
+            resultsDiv.innerHTML = '<p>Searching...</p>';
+
+            if (!cardName) {
+                resultsDiv.innerHTML = '<p>Please enter a card name.</p>';
+                return;
+            }
+
             try {
-                await setDoc(ref, {
-                    ownerId: userId,
-                    passwordHash: hashPassword(pwd),
-                    createdAt: serverTimestamp(),
-                    lastActive: serverTimestamp(),
-                    players: {
-                        [userId]: { life: 40, commanderDamage: {} }
+                const response = await fetch(`${SCRYFALL_API}${encodeURIComponent(cardName)}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    const imgUrl = data.image_uris?.normal || data.card_faces?.[0]?.image_uris?.normal;
+                    if (imgUrl) {
+                        resultsDiv.innerHTML = `
+                            <h4>${data.name}</h4>
+                            <img src="${imgUrl}" alt="${data.name}">
+                        `;
+                    } else {
+                        resultsDiv.innerHTML = '<p>Card found, but image unavailable.</p>';
                     }
-                });
-                listenToRoom(rid);
-            } catch(e) {
+                } else {
+                    resultsDiv.innerHTML = `<p>Card not found. Check spelling.</p>`;
+                }
+            } catch (e) {
+                resultsDiv.innerHTML = `<p>Error connecting to Scryfall.</p>`;
                 console.error(e);
             }
-        }
-
-        function listenToRoom(rid) {
-            if(unsubscribe) unsubscribe();
-            const ref = doc(db, ROOM_COLLECTION, rid);
-            
-            unsubscribe = onSnapshot(ref, (snap) => {
-                if(snap.exists()) {
-                    roomId = rid;
-                    const data = snap.data();
-                    
-                    // If I am not in the player list, add myself
-                    if(!data.players[userId]) {
-                        // Auto-join
-                        setDoc(ref, {
-                            players: { [userId]: { life: 40, commanderDamage: {} } },
-                            lastActive: serverTimestamp()
-                        }, { merge: true });
-                    }
-                    
-                    renderRoomView(data);
-                } else {
-                    renderSetupView();
-                }
-            });
-        }
+        });
 
         // ----------------------------------------------------------------------
         // 6. INIT
