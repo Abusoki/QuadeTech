@@ -21,47 +21,78 @@
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
             border-radius: 8px;
         }
-        .player-counter {
-            border: 1px solid #ccc;
-            padding: 10px;
-            margin-bottom: 10px;
+        /* Room List Styling */
+        #room-list {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
             border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+        .room-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
+        .room-item:last-child {
+            border-bottom: none;
+        }
+        .room-item:hover {
+            background-color: #e9e9e9;
+        }
+        .room-item button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        /* General Input/Button Styling */
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            border: none;
+            border-radius: 4px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        #cancel-btn {
+            background-color: #f44336;
+        }
         .life-control button {
+            width: auto;
             padding: 5px 10px;
             font-size: 1.2em;
-            cursor: pointer;
             margin: 0 2px;
         }
         .life-total {
             font-size: 2em;
             font-weight: bold;
         }
-        #setup-view input, #setup-view button {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-        }
         #status-message {
             color: #333;
             margin-top: 10px;
             text-align: center;
         }
-        #cancel-btn {
-            background-color: #f44336;
-            color: white;
-            border: none;
-        }
-        #create-new-room-btn, #join-room-btn {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-        }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
 <body>
 
@@ -99,7 +130,11 @@
             setDoc, 
             getDoc, 
             onSnapshot, 
-            serverTimestamp 
+            serverTimestamp,
+            collection,
+            getDocs,
+            query,
+            limit
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ----------------------------------------------------------------------
@@ -115,7 +150,17 @@
         const ROOM_COLLECTION = "mtg_rooms";
 
         // ----------------------------------------------------------------------
-        // 🧩 4. CORE FUNCTIONS
+        // 🔒 4. PASSWORD HASHING FUNCTION
+        // ----------------------------------------------------------------------
+
+        /** Calculates a simple SHA256 hash of the password (for front-end validation only). */
+        function hashPassword(password) {
+            // CryptoJS is available globally because it was included in a script tag
+            return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
+        }
+
+        // ----------------------------------------------------------------------
+        // 🧩 5. CORE FUNCTIONS (Modified)
         // ----------------------------------------------------------------------
 
         function getStartingLife() {
@@ -157,6 +202,9 @@
                 `;
             });
 
+            // Add button to return to setup (e.g., to join another room)
+            html += `<button id="leave-room-btn" style="background-color: #6c757d;">Leave Room</button>`;
+
             appContainer.innerHTML = html;
             
             if (document.querySelector('.life-control')) {
@@ -164,6 +212,12 @@
                     button.addEventListener('click', handleLifeChange);
                 });
             }
+
+            document.getElementById('leave-room-btn').addEventListener('click', () => {
+                if (unsubscribe) unsubscribe();
+                roomId = null;
+                renderSetupView();
+            });
         }
 
         function handleLifeChange(e) {
@@ -183,7 +237,6 @@
                 const roomSnap = await getDoc(roomRef);
                 if (roomSnap.exists()) {
                     const roomData = roomSnap.data();
-                    // Use optional chaining for safer life access
                     const currentLife = roomData.players[userId]?.life ?? getStartingLife(); 
                     const newLife = currentLife + delta;
                     
@@ -198,32 +251,72 @@
             }
         }
         
-        // ADDED: Logic to prompt user to create a room
-        function promptToCreateRoom(id) {
+        // NEW VIEW: Prompts user for password to join selected room
+        function promptForPassword(id) {
             const appContainer = document.getElementById("app-container");
-            // Set the global roomId temporarily so the create function knows what to make
-            roomId = id; 
-            document.getElementById("status-message").innerHTML = `Room <strong>${id}</strong> not found.`;
-
+            document.getElementById("status-message").innerHTML = `Enter password for <strong>${id}</strong>.`;
+            
             appContainer.innerHTML = `
-                <h2>Room: ${id}</h2>
-                <p>This room ID is available. Click to create a new game.</p>
-                <button id="create-new-room-btn">Create Room ${id}</button>
+                <h2>Join Room: ${id}</h2>
+                <input type="password" id="room-password" placeholder="Enter Room Password">
+                <button id="submit-password-btn">Join Game</button>
                 <button id="cancel-btn">Cancel</button>
+                <p id="password-error" style="color: red;"></p>
             `;
 
-            document.getElementById('create-new-room-btn').addEventListener('click', () => {
-                createNewRoom(id); 
+            document.getElementById('submit-password-btn').addEventListener('click', async () => {
+                const password = document.getElementById('room-password').value;
+                if (!password) return;
+
+                const roomRef = doc(db, ROOM_COLLECTION, id);
+                const roomSnap = await getDoc(roomRef);
+
+                if (roomSnap.exists()) {
+                    const roomData = roomSnap.data();
+                    // 🔒 Check password hash
+                    if (roomData.passwordHash === hashPassword(password)) {
+                        // Password correct! Start listening and join.
+                        listenToRoom(id); 
+                    } else {
+                        document.getElementById('password-error').textContent = "Incorrect password.";
+                    }
+                } else {
+                    document.getElementById('password-error').textContent = "Room not found.";
+                }
             });
-            
+
             document.getElementById('cancel-btn').addEventListener('click', () => {
-                if (unsubscribe) unsubscribe(); 
-                roomId = null;
                 renderSetupView();
             });
         }
 
-        // UPDATED: Logic to handle non-existent rooms by prompting creation
+        // MODIFIED: When creating, now prompts for password
+        function promptToCreateRoom(id) {
+            const appContainer = document.getElementById("app-container");
+            document.getElementById("status-message").innerHTML = `Room <strong>${id}</strong> not found. Set up a new one.`;
+
+            appContainer.innerHTML = `
+                <h2>Create Room: ${id}</h2>
+                <input type="password" id="new-room-password" placeholder="Set Room Password">
+                <button id="create-new-room-btn">Create Room ${id}</button>
+                <button id="cancel-btn">Cancel</button>
+            `;
+
+            document.getElementById('create-new-room-btn').addEventListener('click', async () => {
+                const password = document.getElementById('new-room-password').value;
+                if (password.length >= 4) {
+                    await createNewRoom(id, password); 
+                } else {
+                    document.getElementById("status-message").innerHTML = "Password must be at least 4 characters.";
+                }
+            });
+            
+            document.getElementById('cancel-btn').addEventListener('click', () => {
+                renderSetupView();
+            });
+        }
+
+        // MODIFIED: Now requires user to enter password *before* listenToRoom is called
         function listenToRoom(id) {
             if (unsubscribe) {
                 unsubscribe();
@@ -236,17 +329,18 @@
                     const roomData = docSnap.data();
                     
                     if (roomData.players && roomData.players[userId]) {
-                        // Room exists and current user is in it.
                         roomId = id;
                         renderRoomView(roomData);
                     } else {
-                        // Room exists but user is not in it, prompt to join.
+                        // Room exists, but user isn't in it. Add them automatically.
                         roomId = id;
-                        promptToJoinRoom(roomData);
+                        joinRoom(id); 
                     }
                 } else {
-                    // Room does not exist. Call the new prompt function.
-                    promptToCreateRoom(id); 
+                    // This should only happen if a room is deleted while listening
+                    if (unsubscribe) unsubscribe();
+                    roomId = null; 
+                    renderSetupView();
                 }
             }, (error) => {
                 console.error("Firestore listener error:", error);
@@ -255,28 +349,6 @@
             });
         }
         
-        function promptToJoinRoom(roomData) {
-            const appContainer = document.getElementById("app-container");
-            document.getElementById("status-message").innerHTML = `Room <strong>${roomId}</strong> found.`;
-
-            let html = `
-                <h2>Join Room: ${roomId}</h2>
-                <p>The room already has ${Object.keys(roomData.players).length} player(s).</p>
-                <button id="join-room-btn">Join Game</button>
-                <button id="cancel-btn">Cancel</button>
-            `;
-            appContainer.innerHTML = html;
-
-            document.getElementById('join-room-btn').addEventListener('click', async () => {
-                await joinRoom(roomId);
-            });
-             document.getElementById('cancel-btn').addEventListener('click', () => {
-                if (unsubscribe) unsubscribe(); 
-                roomId = null;
-                renderSetupView();
-            });
-        }
-
         async function joinRoom(id) {
             if (!userId) return;
             
@@ -297,31 +369,81 @@
             }
         }
         
-        // UPDATED: Now clears roomId and ensures the element is found
-        function renderSetupView() {
+        // MODIFIED: Fetches and displays room list, and changes interaction flow
+        async function renderSetupView() {
             const appContainer = document.getElementById("app-container");
-            roomId = null; // Clear any old room context
-            document.getElementById("status-message").innerHTML = "Enter a **Room ID** to join or create one.";
+            roomId = null; 
+            document.getElementById("status-message").innerHTML = "Select a room below or search to create a new one.";
+
+            // 1. Fetch available rooms
+            const roomsQuery = query(collection(db, ROOM_COLLECTION), limit(20));
+            let roomListHtml = '';
+            try {
+                const querySnapshot = await getDocs(roomsQuery);
+                if (querySnapshot.empty) {
+                    roomListHtml = '<p>No active rooms found.</p>';
+                } else {
+                    querySnapshot.forEach(doc => {
+                        const roomData = doc.data();
+                        const roomID = doc.id;
+                        const playerCount = Object.keys(roomData.players || {}).length;
+                        roomListHtml += `
+                            <div class="room-item" data-room-id="${roomID}">
+                                <span>${roomID} (${playerCount} players)</span>
+                                <button data-room-id="${roomID}">Join</button>
+                            </div>
+                        `;
+                    });
+                }
+            } catch (error) {
+                console.error("Error fetching rooms:", error);
+                roomListHtml = '<p style="color:red;">Error loading rooms. Try refreshing.</p>';
+            }
 
             appContainer.innerHTML = `
                 <h2>MTG Commander Tracker</h2>
-                <div id="setup-view">
-                    <input type="text" id="room-name" placeholder="Enter Room ID">
-                    <button id="search-or-create-btn">Find or Create Room</button>
-                </div>
+
+                <input type="text" id="room-search" placeholder="Search for or enter new Room ID">
+                <button id="search-btn">Search / Create</button>
+                
+                <h3>Active Rooms</h3>
+                <div id="room-list">${roomListHtml}</div>
             `;
 
-            document.getElementById('search-or-create-btn').addEventListener('click', () => {
-                const input = document.getElementById('room-name').value.trim().toLowerCase();
-                if (input) {
-                    listenToRoom(input); 
+            // 2. Add Event Listeners for room list and search
+            
+            // Listeners for the Join buttons on the list
+            document.getElementById('room-list').querySelectorAll('button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const selectedRoomId = e.target.dataset.roomId;
+                    promptForPassword(selectedRoomId);
+                });
+            });
+
+            // Listener for the main search/create button
+            document.getElementById('search-btn').addEventListener('click', async () => {
+                const input = document.getElementById('room-search').value.trim().toLowerCase();
+                if (!input) {
+                    document.getElementById("status-message").innerHTML = "Please enter a Room ID.";
+                    return;
+                }
+                
+                // Check if room exists
+                const roomRef = doc(db, ROOM_COLLECTION, input);
+                const roomSnap = await getDoc(roomRef);
+
+                if (roomSnap.exists()) {
+                    // Room exists, go to password prompt
+                    promptForPassword(input);
                 } else {
-                    document.getElementById("status-message").innerHTML = "Please enter a valid Room ID.";
+                    // Room does not exist, go to create prompt
+                    promptToCreateRoom(input);
                 }
             });
         }
 
-        async function createNewRoom(id) {
+        // MODIFIED: Now saves a hashed password
+        async function createNewRoom(id, password) {
             if (!userId) return;
 
             const roomRef = doc(db, ROOM_COLLECTION, id);
@@ -329,6 +451,8 @@
             const initialRoomData = {
                 roomId: id,
                 ownerId: userId,
+                // 🔒 NEW: Store the hash of the password
+                passwordHash: hashPassword(password), 
                 createdAt: serverTimestamp(),
                 lastUpdated: serverTimestamp(),
                 players: {
@@ -340,8 +464,9 @@
             };
             
             try {
-                // Use { merge: false } to ensure we are creating a new document
-                await setDoc(roomRef, initialRoomData, { merge: false }); 
+                await setDoc(roomRef, initialRoomData, { merge: false });
+                // If successful, start listening to the room
+                listenToRoom(id); 
             } catch (error) {
                 console.error("Error creating room:", error);
                 document.getElementById("status-message").innerHTML = "Error creating room. The ID might be taken.";
@@ -349,18 +474,12 @@
         }
         
         function renderApp() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const initialRoomId = urlParams.get('room');
-
-            if (initialRoomId) {
-                listenToRoom(initialRoomId);
-            } else {
-                renderSetupView();
-            }
+            // No longer check URL parameters, always start at the setup view.
+            renderSetupView();
         }
 
         // ----------------------------------------------------------------------
-        // 🚀 5. INITIALIZATION
+        // 🚀 6. INITIALIZATION
         // ----------------------------------------------------------------------
 
         function initializeFirebase() {
@@ -372,7 +491,6 @@
                     renderApp();
                 } else {
                     try {
-                        // Logs in anonymously if user is signed out
                         await signInAnonymously(auth);
                     } catch (error) {
                         console.error("Anonymous Sign-In Failed:", error);
