@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Life Counter - Real-time</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for aesthetic */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+            color: #f3f4f6;
+        }
+        .card-bg {
+            background-color: #2d3748; /* Darker blue-gray for cards */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.1s ease-in-out;
+        }
+        .card-bg:hover {
+            transform: translateY(-2px);
+        }
+        .life-button {
+            transition: background-color 0.1s;
+        }
+        .life-button:hover {
+            opacity: 0.9;
+        }
+        /* Mobile-first adjustments for the game grid */
+        @media (max-width: 768px) {
+            .player-grid {
+                grid-template-columns: repeat(1, minmax(0, 1fr));
+            }
+        }
+        @media (min-width: 768px) and (max-width: 1024px) {
+            .player-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        @media (min-width: 1024px) {
+            .player-grid-4 {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .player-grid-3 {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+            .player-grid-2 {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        /* Style for the full screen modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #1f2937;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            max-width: 90%;
+            max-height: 90%;
+            overflow-y: auto;
+        }
+    </style>
+    <!-- Font Awesome for Icons -->
+    <script src="https://kit.fontawesome.com/a5e82de7fa.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <div id="app" class="min-h-screen p-4 sm:p-8 flex flex-col items-center">
+        <!-- Application Content will be rendered here -->
+    </div>
+
+    <!-- Firebase SDK Imports -->
+    <script type="module">
+        // Import necessary Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, getDoc, runTransaction, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- CONSTANTS AND INITIALIZATION ---
+        
+        // ***************************************************************
+        // MANDATORY SETUP: REPLACE PLACEHOLDERS BELOW WITH YOUR FIREBASE CONFIG
+        // ***************************************************************
+        const USER_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
+            authDomain: "mtg-life-tool.firebaseapp.com",
+            projectId: "mtg-life-tool", 
+            storageBucket: "mtg-life-tool.firebasestorage.app",
+            messagingSenderId: "841499187926",
+            appId: "1:841499187926:web:b0c8bad1f2a718d4934777",
+        };
+
+        // Canvas-injected environment variables (will be undefined on GitHub Pages)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-mtg-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        let firebaseConfig = {};
+        try {
+            // Attempt to parse the Canvas config if it exists
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                firebaseConfig = JSON.parse(__firebase_config);
+            }
+        } catch (e) {
+            console.error("Error parsing __firebase_config (Ignored for external deployment):", e);
+        }
+
+        // Use Canvas config if available, otherwise use the user's hardcoded config
+        const finalFirebaseConfig = Object.keys(firebaseConfig).length > 0 && firebaseConfig.projectId
+            ? firebaseConfig
+            : USER_FIREBASE_CONFIG;
+        
+        // Set Firebase Log Level for debugging
+        setLogLevel('Debug');
+
+        let app, db, auth;
+        let userId = null;
+        let isAuthReady = false;
+
+        let roomData = {
+            roomName: '',
+            isCommander: false,
+            playerCount: 2,
+            players: [],
+            hostId: null,
+            roomPath: null
+        };
+
+        const appContainer = document.getElementById('app');
+        const FIREBASE_COLLECTION = 'mtg_rooms';
+        const LOCAL_ROOM_PATH_KEY = 'mtg_roomPath';
+        const LOCAL_PLAYER_NAME_KEY = 'mtg_playerName';
+
+
+        // Helper to generate a unique room ID
+        const generateRoomId = (name) => {
+            return name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.random().toString(36).substring(2, 6);
+        };
+
+        // Helper to show a temporary message
+        const showMessage = (text, type = 'error') => {
+            const container = document.getElementById('message-container');
+            if (!container) return;
+            container.innerHTML = `<div class="p-3 mb-4 rounded-lg text-sm font-medium ${type === 'error' ? 'bg-red-900 text-red-300' : 'bg-green-900 text-green-300'}">${text}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        };
+
+        // --- FIREBASE INITIALIZATION AND AUTHENTICATION ---
+        async function initializeFirebase() {
+            try {
+                // Safety check for user configuration
+                if (!finalFirebaseConfig.projectId || finalFirebaseConfig.projectId.includes('YOUR_PROJECT_ID')) {
+                    const message = "Configuration Error: Please edit the script to provide your Firebase project credentials in the USER_FIREBASE_CONFIG object.";
+                    console.error(message);
+                    appContainer.innerHTML = `<div class="text-center mt-20 p-6 bg-red-900 text-red-300 rounded-lg shadow-xl max-w-lg mx-auto">
+                        <h2 class="text-xl font-bold mb-2">Setup Required for Live State</h2>
+                        <p>${message}</p>
+                        <p class="mt-4 text-sm">The app cannot connect to the database without your credentials.</p>
+                    </div>`;
+                    return;
+                }
+
+                app = initializeApp(finalFirebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Wait for auth state change to get the definitive userId
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        
+                        // Check if we were previously in a game
+                        const savedRoomPath = sessionStorage.getItem(LOCAL_ROOM_PATH_KEY);
+                        if (savedRoomPath) {
+                            roomData.roomPath = savedRoomPath;
+                            renderApp();
+                            await subscribeToRoom(savedRoomPath);
+                        } else {
+                            renderApp(); // Render setup screen
+                        }
+                    } else {
+                        // Sign in anonymously if no Canvas token is available
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+                showMessage(`Failed to initialize Firebase: ${error.message}`, 'error');
+            }
+        }
+
+        // --- FIREBASE DATA FUNCTIONS ---
+        // Public Data Path: /artifacts/{appId}/public/data/mtg_rooms/{roomId}
+        const getRoomDocRef = (roomId) => doc(db, `/artifacts/${appId}/public/data/${FIREBASE_COLLECTION}`, roomId);
+
+        // Creates a new room document
+        async function createRoom(name, playerCount, isCommander) {
+            const roomId = generateRoomId(name);
+            const path = getRoomDocRef(roomId);
+
+            const initialLife = isCommander ? 40 : 20;
+
+            // Generate initial player list
+            const players = Array.from({ length: playerCount }).map((_, index) => ({
+                id: null, // Will be assigned on join
+                name: `Player ${index + 1}`,
+                life: initialLife,
+                commanderDamage: {}, 
+            }));
+
+            // Host takes the first slot
+            players[0].id = userId;
+            const hostName = sessionStorage.getItem(LOCAL_PLAYER_NAME_KEY) || players[0].name;
+            players[0].name = hostName;
+            sessionStorage.setItem(LOCAL_PLAYER_NAME_KEY, hostName);
+
+            const newRoom = {
+                roomName: name,
+                isCommander: isCommander,
+                playerCount: parseInt(playerCount),
+                players: players,
+                hostId: userId,
+                createdAt: new Date().toISOString()
+            };
+
+            try {
+                await setDoc(path, newRoom);
+                sessionStorage.setItem(LOCAL_ROOM_PATH_KEY, path.path);
+                showMessage(`Room "${name}" created! Share the name: ${name}`, 'success');
+                return path.path;
+            } catch (error) {
+                console.error("Error creating room:", error);
+                showMessage(`Error creating room: ${error.message}`, 'error');
+                return null;
+            }
+        }
+        
+        // Joins an existing room
+        async function joinRoom(roomId, playerName) {
+            const path = getRoomDocRef(roomId);
+
+            try {
+                // Use a transaction to safely update the player list
+                await runTransaction(db, async (transaction) => {
+                    const roomSnapshot = await transaction.get(path);
+
+                    if (!roomSnapshot.exists()) {
+                        throw new Error("Room not found.");
+                    }
+
+                    const room = roomSnapshot.data();
+                    let players = [...room.players];
+                    let spotIndex = -1;
+
+                    // 1. Try to reclaim an existing spot if the user rejoins
+                    spotIndex = players.findIndex(p => p.id === userId);
+
+                    if (spotIndex === -1) {
+                        // 2. Find the first empty slot (id === null)
+                        spotIndex = players.findIndex(p => p.id === null);
+
+                        if (spotIndex !== -1) {
+                            // Found an empty slot
+                            players[spotIndex].id = userId;
+                            players[spotIndex].name = playerName || `Player ${spotIndex + 1}`;
+                        } else {
+                            throw new Error("Room is full. All player slots are occupied.");
+                        }
+                    } else {
+                        // User is rejoining an existing slot, update their name
+                        players[spotIndex].name = playerName || players[spotIndex].name;
+                    }
+                    
+                    transaction.update(path, { players: players });
+                    sessionStorage.setItem(LOCAL_ROOM_PATH_KEY, path.path);
+                    sessionStorage.setItem(LOCAL_PLAYER_NAME_KEY, players[spotIndex].name);
+                    
+                    showMessage(`Joined room "${room.roomName}" as ${players[spotIndex].name}!`, 'success');
+                });
+                return path.path; // Transaction successful
+            } catch (error) {
+                console.error("Error joining room:", error);
+                showMessage(`Error joining room: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+
+        // Subscribe to real-time updates for the room
+        function subscribeToRoom(pathString) {
+            if (!db || !isAuthReady) return;
+            
+            const [collection, roomId] = pathString.split('/').slice(-2);
+            if (collection !== FIREBASE_COLLECTION) {
+                 console.error("Invalid room path detected.");
+                 return;
+            }
+            
+            const docRef = getRoomDocRef(roomId);
+
+            // Detach any previous listener
+            if (window.unsubscribe) {
+                window.unsubscribe();
+            }
+
+            // Set up the real-time listener
+            window.unsubscribe = onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const latestData = docSnap.data();
+                    roomData = {
+                        ...roomData,
+                        ...latestData,
+                        roomPath: docSnap.ref.path
+                    };
+                    renderApp(); // Re-render the UI with fresh data
+                } else {
+                    // Room no longer exists
+                    console.log("Room closed or deleted.");
+                    sessionStorage.removeItem(LOCAL_ROOM_PATH_KEY);
+                    roomData = { roomName: '', isCommander: false, playerCount: 2, players: [], hostId: null, roomPath: null };
+                    renderApp(); // Go back to setup
+                }
+            }, (error) => {
+                console.error("Firestore snapshot error:", error);
+                // Gracefully handle permission denied errors which can happen if rules are wrong
+                showMessage(`Real-time update failed. Check console for details.`, 'error');
+            });
+        }
+        
+        // Updates a specific player's data field (life or commander damage)
+        // This function MUST use a transaction for concurrent safety
+        async function updatePlayer(playerIndex, field, value, commanderSourceId = null) {
+            if (!roomData.roomPath) return;
+
+            const [collection, roomId] = roomData.roomPath.split('/').slice(-2);
+            const docRef = getRoomDocRef(roomId);
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const roomSnapshot = await transaction.get(docRef);
+
+                    if (!roomSnapshot.exists()) {
+                        throw new Error("Game session ended.");
+                    }
+
+                    const currentPlayers = [...roomSnapshot.data().players];
+
+                    if (playerIndex >= 0 && playerIndex < currentPlayers.length) {
+                        if (field === 'life') {
+                            currentPlayers[playerIndex].life = currentPlayers[playerIndex].life + value;
+                        } else if (field === 'commanderDamage' && commanderSourceId) {
+                            // Commander damage tracking
+                            if (!currentPlayers[playerIndex].commanderDamage) {
+                                currentPlayers[playerIndex].commanderDamage = {};
+                            }
+                            const currentDmg = currentPlayers[playerIndex].commanderDamage[commanderSourceId] || 0;
+                            currentPlayers[playerIndex].commanderDamage[commanderSourceId] = Math.max(0, currentDmg + value);
+                        }
+                        
+                        transaction.update(docRef, { players: currentPlayers });
+                    }
+                });
+            } catch (error) {
+                console.error("Transaction failed (concurrent edit or other error):", error);
+            }
+        }
+        
+        // --- UI RENDERING FUNCTIONS ---
+        function renderApp() {
+            if (!isAuthReady) {
+                appContainer.innerHTML = '<div class="text-center mt-10"><i class="fas fa-spinner fa-spin text-xl text-indigo-400"></i> Connecting to Live State...</div>';
+                return;
+            }
+
+            // If we have a roomPath, go to Game View, otherwise Setup View
+            if (roomData.roomPath) {
+                renderGameView();
+            } else {
+                renderSetupView();
+            }
+        }
+        
+        // --- SETUP VIEW RENDERING ---
+        function renderSetupView() {
+            appContainer.innerHTML = `
+                <h1 class="text-4xl font-extrabold mb-8 text-indigo-400">MTG Live Life Counter</h1>
+                <div id="message-container"></div>
+                
+                <div class="bg-gray-800 p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-md">
+                    <h2 class="text-2xl font-semibold mb-6 text-gray-200">Start or Join a Shared Game</h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label for="roomName" class="block text-sm font-medium text-gray-400">Room Name (e.g., 'FridayNight')</label>
+                            <input type="text" id="roomName" placeholder="Enter room name to create/join" 
+                                class="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white p-3 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+                        </div>
+                        <div>
+                            <label for="playerName" class="block text-sm font-medium text-gray-400">Your Player Name</label>
+                            <input type="text" id="playerName" placeholder="Your name (e.g., Jane)" 
+                                value="${sessionStorage.getItem(LOCAL_PLAYER_NAME_KEY) || ''}"
+                                class="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white p-3 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm" />
+                        </div>
+                        <div>
+                            <label for="playerCount" class="block text-sm font-medium text-gray-400">Number of Player Slots (Max 4)</label>
+                            <select id="playerCount" class="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white p-3 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm">
+                                <option value="2">2 Players</option>
+                                <option value="3">3 Players</option>
+                                <option value="4" selected>4 Players</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-gray-700 rounded-md">
+                            <label for="isCommander" class="text-sm font-medium text-gray-200">Commander (Starting Life 40)</label>
+                            <input type="checkbox" id="isCommander" class="h-5 w-5 text-indigo-500 border-gray-600 rounded focus:ring-indigo-500" checked />
+                        </div>
+                        
+                        <button id="createOrJoinBtn" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 mt-6 transition duration-150 ease-in-out">
+                            Create or Join Live Game
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('createOrJoinBtn').addEventListener('click', handleSetupSubmit);
+        }
+
+        async function handleSetupSubmit() {
+            const roomName = document.getElementById('roomName').value.trim();
+            const playerName = document.getElementById('playerName').value.trim() || 'Guest';
+            const playerCount = parseInt(document.getElementById('playerCount').value);
+            const isCommander = document.getElementById('isCommander').checked;
+
+            if (!roomName) {
+                showMessage("Please enter a valid Room Name.", 'error');
+                return;
+            }
+
+            sessionStorage.setItem(LOCAL_PLAYER_NAME_KEY, playerName);
+            
+            // Generate a deterministic room ID from the name for lookup
+            const targetRoomId = generateRoomId(roomName);
+            const roomDocRef = getRoomDocRef(targetRoomId);
+
+            try {
+                const roomSnap = await getDoc(roomDocRef);
+                
+                if (roomSnap.exists()) {
+                    // Room exists, attempt to join
+                    const path = await joinRoom(targetRoomId, playerName);
+                    if (path) {
+                        await subscribeToRoom(path);
+                    }
+                } else {
+                    // Room does not exist, attempt to create
+                    const path = await createRoom(roomName, playerCount, isCommander);
+                    if (path) {
+                        await subscribeToRoom(path);
+                    }
+                }
+            } catch (e) {
+                console.error("Setup error:", e);
+                showMessage("An unexpected error occurred during setup.", 'error');
+            }
+        }
+        
+        // --- GAME VIEW RENDERING ---
+        
+        function renderGameView() {
+            const { roomName, isCommander, playerCount, players } = roomData;
+            
+            const localPlayerIndex = players.findIndex(p => p.id === userId);
+
+            // Map player count to Tailwind grid classes for responsive layout
+            let gridClass = 'player-grid grid gap-6 p-4';
+            if (playerCount === 2) {
+                gridClass += ' player-grid-2';
+            } else if (playerCount === 3) {
+                gridClass += ' player-grid-3';
+            } else {
+                gridClass += ' player-grid-4';
+            }
+
+            // Function to generate player cards
+            const playerCards = players.map((player, pIndex) => {
+                const isLocalUser = player.id === userId;
+                const headerColor = isLocalUser ? 'bg-indigo-600' : 'bg-gray-700';
+                
+                // Determine if player has lost (life <= 0)
+                const isEliminated = player.life <= 0;
+                const cardStyle = isEliminated ? 'opacity-50 border-4 border-red-500' : 'border-2 border-transparent';
+
+                // Commander Damage Modal HTML (hidden by default)
+                // Note: The modal tracks damage dealt TO this player FROM other players.
+                const commanderDamageModal = isCommander ? `
+                    <div id="cmd-modal-${pIndex}" class="modal hidden">
+                        <div class="modal-content w-full max-w-lg">
+                            <h3 class="text-2xl font-bold mb-4">Commander Damage to ${player.name}</h3>
+                            <div class="space-y-3">
+                                <!-- List all other players as potential sources of damage -->
+                                ${players.filter(p => p.id && p.id !== player.id).map((commander, cIndex) => {
+                                    const damage = player.commanderDamage[commander.id] || 0;
+                                    const damageColor = damage >= 21 ? 'text-red-500 font-bold' : 'text-yellow-400';
+                                    return `
+                                        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-gray-700 rounded-lg">
+                                            <span class="text-lg mb-2 sm:mb-0">${commander.name} damage: <span class="${damageColor}">${damage}</span></span>
+                                            <div class="flex space-x-1.5 mt-2 sm:mt-0">
+                                                <button onclick="updatePlayer(${pIndex}, 'commanderDamage', -5, '${commander.id}')" class="p-2 w-10 h-10 bg-red-900 hover:bg-red-800 rounded-lg text-sm font-bold">-5</button>
+                                                <button onclick="updatePlayer(${pIndex}, 'commanderDamage', -1, '${commander.id}')" class="p-2 w-10 h-10 bg-red-600 hover:bg-red-500 rounded-lg text-lg"><i class="fas fa-minus"></i></button>
+                                                <button onclick="updatePlayer(${pIndex}, 'commanderDamage', 1, '${commander.id}')" class="p-2 w-10 h-10 bg-green-600 hover:bg-green-500 rounded-lg text-lg"><i class="fas fa-plus"></i></button>
+                                                <button onclick="updatePlayer(${pIndex}, 'commanderDamage', 5, '${commander.id}')" class="p-2 w-10 h-10 bg-green-900 hover:bg-green-800 rounded-lg text-sm font-bold">+5</button>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                            <button onclick="document.getElementById('cmd-modal-${pIndex}').classList.add('hidden')" class="mt-6 w-full py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-semibold">Close</button>
+                        </div>
+                    </div>
+                ` : '';
+
+                // Commander Damage Button (visible on every player card to check/edit damage received)
+                const cmdDmgButton = isCommander && player.id ? `
+                    <button onclick="document.getElementById('cmd-modal-${pIndex}').classList.remove('hidden')" 
+                            class="absolute top-2 right-2 p-2 bg-yellow-600 hover:bg-yellow-700 rounded-full text-xs font-bold transition duration-150 ease-in-out">
+                        CMD DMG
+                    </button>
+                ` : '';
+                
+                // Display for Commander Damage total
+                let commanderDamageDisplay = '';
+                if (isCommander) {
+                    const totalDmg = Object.values(player.commanderDamage).reduce((acc, dmg) => acc + dmg, 0);
+                    commanderDamageDisplay = `
+                        <div class="text-sm font-medium mt-1 text-yellow-400">
+                            CMD: ${totalDmg}
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="card-bg rounded-xl shadow-xl overflow-hidden text-center flex flex-col ${cardStyle}">
+                        <div class="${headerColor} p-3 font-bold text-lg relative">
+                            ${player.name} ${isLocalUser ? '(You)' : ''}
+                            ${!player.id ? '<span class="text-xs font-normal text-gray-300 ml-1">(Open Slot)</span>' : ''}
+                            ${cmdDmgButton}
+                        </div>
+
+                        <!-- Life Total Display -->
+                        <div class="flex-grow flex flex-col justify-center items-center py-4">
+                            <div class="text-7xl sm:text-8xl font-black transition-all duration-300 ${player.life <= 0 ? 'text-red-500' : (player.life < 10 ? 'text-yellow-500' : 'text-green-400')}">
+                                ${player.life}
+                            </div>
+                            ${commanderDamageDisplay}
+                        </div>
+
+                        <!-- Controls: Only the connected user can modify their own life total -->
+                        ${isLocalUser ? `
+                        <div class="flex border-t border-gray-700">
+                            <!-- Minus 5 -->
+                            <button onclick="updatePlayer(${pIndex}, 'life', -5)" 
+                                class="life-button w-1/4 p-4 text-3xl bg-red-900 hover:bg-red-700 border-r border-gray-700 font-extrabold rounded-bl-xl">
+                                -5
+                            </button>
+                            <!-- Minus 1 -->
+                            <button onclick="updatePlayer(${pIndex}, 'life', -1)" 
+                                class="life-button w-1/4 p-4 text-3xl bg-red-700 hover:bg-red-600 border-r border-gray-700 font-extrabold">
+                                -1
+                            </button>
+                            <!-- Plus 1 -->
+                            <button onclick="updatePlayer(${pIndex}, 'life', 1)" 
+                                class="life-button w-1/4 p-4 text-3xl bg-green-700 hover:bg-green-600 border-r border-gray-700 font-extrabold">
+                                +1
+                            </button>
+                            <!-- Plus 5 -->
+                            <button onclick="updatePlayer(${pIndex}, 'life', 5)" 
+                                class="life-button w-1/4 p-4 text-3xl bg-green-900 hover:bg-green-700 font-extrabold rounded-br-xl">
+                                +5
+                            </button>
+                        </div>
+                        ` : `
+                        <div class="flex justify-center items-center p-3 text-gray-400 border-t border-gray-700">
+                            Remote Control
+                        </div>
+                        `}
+                    </div>
+                    ${commanderDamageModal}
+                `;
+            }).join('');
+            
+            appContainer.innerHTML = `
+                <div class="w-full max-w-7xl">
+                    <div class="flex justify-between items-center mb-6 pb-2 border-b border-gray-700">
+                        <h1 class="text-2xl sm:text-3xl font-bold text-white truncate">Live Room: ${roomName} <span class="text-sm font-normal text-gray-400">(${isCommander ? 'Commander' : 'Standard'})</span></h1>
+                        <button id="leaveBtn" class="py-2 px-4 text-sm bg-red-600 hover:bg-red-700 rounded-lg font-semibold transition duration-150 ease-in-out">
+                            Leave Game
+                        </button>
+                    </div>
+                    <div id="message-container"></div>
+                    
+                    <!-- Player Grid -->
+                    <div class="${gridClass}">
+                        ${playerCards}
+                    </div>
+                    
+                    <div class="mt-8 text-center text-gray-500 text-xs">
+                        Share the Room Name: <span class="font-mono text-white">${roomName}</span>. Your unique ID: <span class="font-mono">${userId}</span>
+                    </div>
+                </div>
+            `;
+            
+            // Attach event listener for the Leave button
+            document.getElementById('leaveBtn').addEventListener('click', handleLeaveGame);
+        }
+        
+        function handleLeaveGame() {
+            if (window.unsubscribe) {
+                window.unsubscribe();
+            }
+            sessionStorage.removeItem(LOCAL_ROOM_PATH_KEY);
+            sessionStorage.removeItem(LOCAL_PLAYER_NAME_KEY);
+            roomData = { roomName: '', isCommander: false, playerCount: 2, players: [], hostId: null, roomPath: null };
+            renderApp();
+            showMessage("You have left the game.", 'success');
+        }
+
+
+        // Expose updatePlayer function globally so it can be called from the buttons in HTML
+        window.updatePlayer = updatePlayer;
+
+        // Start the application
+        window.onload = initializeFirebase;
+    </script>
+</body>
+</html>
