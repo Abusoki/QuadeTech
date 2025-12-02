@@ -441,6 +441,7 @@
                     const data = snap.data();
                     const cur = data.players[userId]?.life ?? getStartingLife();
                     
+                    // Updates ONLY the life property under the current user's ID
                     await setDoc(ref, {
                         players: { [userId]: { life: cur + delta } },
                         lastActive: serverTimestamp()
@@ -449,7 +450,7 @@
             } catch(e) { console.error(e); }
         }
 
-        // FIX: Commander damage update logic corrected
+        // FIX: Commander damage update logic rewritten for reliability
         async function updateCmdDamage(oppId, delta) {
             if (!roomId || !userId) return;
             const ref = doc(db, ROOM_COLLECTION, roomId);
@@ -457,23 +458,36 @@
                 const snap = await getDoc(ref);
                 if (snap.exists()) {
                     const data = snap.data();
-                    const cur = data.players?.[userId]?.commanderDamage?.[oppId] ?? 0;
-                    const newVal = Math.max(0, cur + delta);
-
-                    // CORRECT PATH USAGE: players.[userId].commanderDamage.[oppId]
-                    const fieldPath = `players.${userId}.commanderDamage.${oppId}`;
                     
+                    // 1. Get the current player's data object
+                    const currentPlayer = data.players[userId];
+                    if (!currentPlayer) return;
+
+                    // 2. Safely read and update the commander damage for the specific opponent
+                    const currentDamageMap = currentPlayer.commanderDamage || {};
+                    const currentDamage = currentDamageMap[oppId] || 0;
+                    const newDamage = Math.max(0, currentDamage + delta);
+
+                    currentDamageMap[oppId] = newDamage;
+
+                    // 3. Write back the ENTIRE updated players object (only the current user is updated)
                     await setDoc(ref, {
-                        [fieldPath]: newVal,
+                        players: { 
+                            [userId]: { 
+                                // Use the existing player data (name, life, etc.) and overwrite commanderDamage
+                                ...currentPlayer,
+                                commanderDamage: currentDamageMap
+                            } 
+                        },
                         lastActive: serverTimestamp()
                     }, { merge: true });
+
                 }
-            } catch(e) { console.error(e); }
+            } catch(e) { console.error("Error updating commander damage:", e); }
         }
 
         // --- SETUP & LIST VIEWS ---
 
-        // MODIFIED: Added playerName and commanderName to the prompt
         function promptPassword(rid, mode) {
             const appContainer = document.getElementById("app-container");
             const title = mode === 'join' ? `Join ${rid}` : `Create ${rid}`;
@@ -498,7 +512,6 @@
                 if(!name || !pwd) return;
                 
                 if (mode === 'join') {
-                    // ... (Join Logic remains the same, passing new data to joinRoom)
                     const ref = doc(db, ROOM_COLLECTION, rid);
                     const snap = await getDoc(ref);
                     if(snap.exists()) {
@@ -517,7 +530,6 @@
                         document.getElementById("err-msg").textContent = "Room no longer exists.";
                     }
                 } else {
-                    // Create logic
                     if(pwd.length < 3) {
                         document.getElementById("err-msg").textContent = "Password too short.";
                         return;
@@ -527,7 +539,6 @@
             };
         }
 
-        // MODIFIED: createRoom now accepts name and commander
         async function createRoom(rid, pwd, name, commander) {
             if(!userId) return;
             const ref = doc(db, ROOM_COLLECTION, rid);
@@ -547,7 +558,6 @@
             }
         }
         
-        // MODIFIED: listenToRoom now updates player name/commander if joining
         function listenToRoom(rid, newName = null, newCommander = null) {
             if(unsubscribe) unsubscribe();
             const ref = doc(db, ROOM_COLLECTION, rid);
@@ -557,17 +567,13 @@
                     roomId = rid;
                     const data = snap.data();
                     
-                    // If I am not in the player list, auto-join with provided data
                     if(!data.players[userId]) {
-                        // This logic is triggered ONLY on the first load after password entry
                         if (newName && newCommander) {
                             setDoc(ref, {
                                 players: { [userId]: { life: getStartingLife(), commanderDamage: {}, name: newName, commander: newCommander } },
                                 lastActive: serverTimestamp()
                             }, { merge: true });
                         } else {
-                            // If re-joining without data (e.g., simple refresh), prompt for name/commander
-                            // For simplicity here, we'll just go back to setup
                             renderSetupView();
                             return;
                         }
@@ -581,7 +587,6 @@
         }
 
         async function renderSetupView() {
-            // ... (Setup view logic remains largely the same) ...
             const appContainer = document.getElementById("app-container");
             const statusMessage = document.getElementById("status-message");
             roomId = null;
@@ -612,8 +617,6 @@
                         const rId = docSnap.id;
                         const pCount = Object.keys(rData.players || {}).length;
                         const ownerName = rData.players[rData.ownerId]?.name || 'Owner';
-
-                        // Player name and Commander name in the lobby list
                         const ownerCmd = rData.players[rData.ownerId]?.commander || 'N/A';
                         
                         listHtml += `
@@ -635,8 +638,6 @@
             const listContainer = document.getElementById("room-list-container");
             if(listContainer) listContainer.innerHTML = listHtml;
 
-            // --- ATTACH LISTENERS ---
-            
             if(listContainer) {
                 listContainer.querySelectorAll('.join-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
