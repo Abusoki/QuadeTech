@@ -34,6 +34,7 @@
             padding: 5px 10px;
             font-size: 1.2em;
             cursor: pointer;
+            margin: 0 2px;
         }
         .life-total {
             font-size: 2em;
@@ -46,8 +47,19 @@
             box-sizing: border-box;
         }
         #status-message {
-            color: gray;
+            color: #333;
             margin-top: 10px;
+            text-align: center;
+        }
+        #cancel-btn {
+            background-color: #f44336;
+            color: white;
+            border: none;
+        }
+        #create-new-room-btn, #join-room-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
         }
     </style>
 </head>
@@ -63,11 +75,8 @@
         // 🔑 1. CONFIGURATION (REPLACE WITH YOUR ACTUAL FIREBASE VALUES)
         // ----------------------------------------------------------------------
         const USER_FIREBASE_CONFIG = {
-            // Check this for correctness (Fix for auth/configuration-not-found)
             apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E", 
-            // Check this for correctness
             authDomain: "mtg-life-tool.firebaseapp.com",
-            // Check this for correctness
             projectId: "mtg-life-tool", 
             storageBucket: "mtg-life-tool.appspot.com",
             messagingSenderId: "36730058988",
@@ -103,35 +112,28 @@
         let userId = null;
         let roomId = null;
         let unsubscribe = null;
-        const ROOM_COLLECTION = "mtg_rooms"; // FIX: Consistent collection name
+        const ROOM_COLLECTION = "mtg_rooms";
 
         // ----------------------------------------------------------------------
         // 🧩 4. CORE FUNCTIONS
         // ----------------------------------------------------------------------
 
-        /** Gets the initial life for the MTG format. */
         function getStartingLife() {
-            // Standard Commander starting life
             return 40; 
         }
 
-        /**
-         * Renders the view for tracking life totals.
-         * @param {object} roomData - The data for the current room.
-         */
         function renderRoomView(roomData) {
             const appContainer = document.getElementById("app-container");
             const statusMessage = document.getElementById("status-message");
 
             if (!roomData || !roomData.players) {
-                // If the room data is corrupted or missing players
                 appContainer.innerHTML = '<h2>Room Data Error</h2><p>Could not load player data.</p>';
                 return;
             }
 
-            statusMessage.innerHTML = `Room: <strong>${roomId}</strong> | Owner: ${roomData.ownerId === userId ? 'You' : roomData.ownerId}`;
+            statusMessage.innerHTML = `Room ID: <strong>${roomId}</strong> | ${roomData.ownerId === userId ? 'You are the Owner' : 'Connected'}`;
             
-            let html = `<h2>Room: ${roomId}</h2>`;
+            let html = `<h2>Current Game State</h2>`;
 
             Object.keys(roomData.players).forEach(playerId => {
                 const player = roomData.players[playerId];
@@ -140,7 +142,7 @@
                 html += `
                     <div class="player-counter" id="player-${playerId}">
                         <div>
-                            <p><strong>${isCurrentPlayer ? 'You' : 'Opponent'}</strong></p>
+                            <p><strong>${isCurrentPlayer ? 'You' : `Player (${playerId.substring(0, 4)}...)`}</strong></p>
                             <p>Life: <span class="life-total">${player.life}</span></p>
                         </div>
                         ${isCurrentPlayer ? `
@@ -157,7 +159,6 @@
 
             appContainer.innerHTML = html;
             
-            // Add listeners after rendering
             if (document.querySelector('.life-control')) {
                 document.querySelectorAll('.life-control button').forEach(button => {
                     button.addEventListener('click', handleLifeChange);
@@ -165,19 +166,11 @@
             }
         }
 
-        /**
-         * Handles the click event for changing life totals.
-         * @param {Event} e 
-         */
         function handleLifeChange(e) {
             const delta = parseInt(e.target.dataset.delta, 10);
             updateLife(delta);
         }
         
-        /**
-         * Updates the current user's life total in Firestore.
-         * @param {number} delta - The amount to change the life total by.
-         */
         async function updateLife(delta) {
             if (!roomId || !userId) {
                 console.error("Room or User ID is missing.");
@@ -186,15 +179,14 @@
 
             const roomRef = doc(db, ROOM_COLLECTION, roomId);
 
-            // Fetch current data to safely apply the update
             try {
                 const roomSnap = await getDoc(roomRef);
                 if (roomSnap.exists()) {
                     const roomData = roomSnap.data();
-                    const currentLife = roomData.players[userId]?.life || getStartingLife();
+                    // Use optional chaining for safer life access
+                    const currentLife = roomData.players[userId]?.life ?? getStartingLife(); 
                     const newLife = currentLife + delta;
                     
-                    // Update only the current player's life field
                     const updatePayload = {};
                     updatePayload[`players.${userId}.life`] = newLife;
                     updatePayload.lastUpdated = serverTimestamp();
@@ -206,64 +198,85 @@
             }
         }
         
-        /**
-         * Sets up the real-time listener for the room data.
-         * @param {string} id - The ID of the room to listen to.
-         */
+        // ADDED: Logic to prompt user to create a room
+        function promptToCreateRoom(id) {
+            const appContainer = document.getElementById("app-container");
+            // Set the global roomId temporarily so the create function knows what to make
+            roomId = id; 
+            document.getElementById("status-message").innerHTML = `Room <strong>${id}</strong> not found.`;
+
+            appContainer.innerHTML = `
+                <h2>Room: ${id}</h2>
+                <p>This room ID is available. Click to create a new game.</p>
+                <button id="create-new-room-btn">Create Room ${id}</button>
+                <button id="cancel-btn">Cancel</button>
+            `;
+
+            document.getElementById('create-new-room-btn').addEventListener('click', () => {
+                createNewRoom(id); 
+            });
+            
+            document.getElementById('cancel-btn').addEventListener('click', () => {
+                if (unsubscribe) unsubscribe(); 
+                roomId = null;
+                renderSetupView();
+            });
+        }
+
+        // UPDATED: Logic to handle non-existent rooms by prompting creation
         function listenToRoom(id) {
-            // Clear existing listener if one exists
             if (unsubscribe) {
                 unsubscribe();
             }
 
             const roomRef = doc(db, ROOM_COLLECTION, id);
             
-            // Set up new listener
             unsubscribe = onSnapshot(roomRef, (docSnap) => {
-                if (docSnap.exists() && docSnap.data().players[userId]) {
-                    // Room exists and current user is in it.
-                    roomId = id;
-                    renderRoomView(docSnap.data());
-                } else if (docSnap.exists() && !docSnap.data().players[userId]) {
-                    // Room exists but user is not in it, prompt to join.
-                    roomId = id;
-                    promptToJoinRoom(docSnap.data());
+                if (docSnap.exists()) {
+                    const roomData = docSnap.data();
+                    
+                    if (roomData.players && roomData.players[userId]) {
+                        // Room exists and current user is in it.
+                        roomId = id;
+                        renderRoomView(roomData);
+                    } else {
+                        // Room exists but user is not in it, prompt to join.
+                        roomId = id;
+                        promptToJoinRoom(roomData);
+                    }
                 } else {
-                    // Room does not exist.
-                    roomId = null;
-                    renderSetupView();
+                    // Room does not exist. Call the new prompt function.
+                    promptToCreateRoom(id); 
                 }
             }, (error) => {
                 console.error("Firestore listener error:", error);
-                // Fallback to setup on error
+                document.getElementById("status-message").innerHTML = `Error accessing room: ${error.message}`;
                 renderSetupView(); 
             });
         }
         
-        /**
-         * Prompts the user to join an existing room.
-         * @param {object} roomData - The data of the room the user wants to join.
-         */
         function promptToJoinRoom(roomData) {
             const appContainer = document.getElementById("app-container");
-            document.getElementById("status-message").innerHTML = `Room <strong>${roomId}</strong> found. Join as a new player?`;
+            document.getElementById("status-message").innerHTML = `Room <strong>${roomId}</strong> found.`;
 
             let html = `
                 <h2>Join Room: ${roomId}</h2>
-                <p>The room already has ${Object.keys(roomData.players).length} players.</p>
+                <p>The room already has ${Object.keys(roomData.players).length} player(s).</p>
                 <button id="join-room-btn">Join Game</button>
+                <button id="cancel-btn">Cancel</button>
             `;
             appContainer.innerHTML = html;
 
             document.getElementById('join-room-btn').addEventListener('click', async () => {
                 await joinRoom(roomId);
             });
+             document.getElementById('cancel-btn').addEventListener('click', () => {
+                if (unsubscribe) unsubscribe(); 
+                roomId = null;
+                renderSetupView();
+            });
         }
 
-        /**
-         * Joins the current user to an existing room.
-         * @param {string} id - The ID of the room to join.
-         */
         async function joinRoom(id) {
             if (!userId) return;
             
@@ -278,20 +291,17 @@
 
             try {
                 await setDoc(roomRef, updatePayload, { merge: true });
-                // The listener (listenToRoom) will automatically switch to renderRoomView
             } catch (error) {
                 console.error("Error joining room:", error);
                 document.getElementById("status-message").innerHTML = "Error joining room. Try again.";
             }
         }
         
-        /**
-         * Renders the initial view for creating or joining a room.
-         */
+        // UPDATED: Now clears roomId and ensures the element is found
         function renderSetupView() {
             const appContainer = document.getElementById("app-container");
-            // ⚠️ Line 274 fix relies on this element existing!
-            document.getElementById("status-message").innerHTML = "Enter a Room ID to join or create one.";
+            roomId = null; // Clear any old room context
+            document.getElementById("status-message").innerHTML = "Enter a **Room ID** to join or create one.";
 
             appContainer.innerHTML = `
                 <h2>MTG Commander Tracker</h2>
@@ -304,7 +314,6 @@
             document.getElementById('search-or-create-btn').addEventListener('click', () => {
                 const input = document.getElementById('room-name').value.trim().toLowerCase();
                 if (input) {
-                    // Re-use the existing setup to start listening to a room ID
                     listenToRoom(input); 
                 } else {
                     document.getElementById("status-message").innerHTML = "Please enter a valid Room ID.";
@@ -312,10 +321,6 @@
             });
         }
 
-        /**
-         * Creates a new room with the current user as the owner.
-         * @param {string} id - The ID for the new room.
-         */
         async function createNewRoom(id) {
             if (!userId) return;
 
@@ -335,50 +340,40 @@
             };
             
             try {
-                await setDoc(roomRef, initialRoomData, { merge: false });
-                // The listener (listenToRoom) will automatically switch to renderRoomView
+                // Use { merge: false } to ensure we are creating a new document
+                await setDoc(roomRef, initialRoomData, { merge: false }); 
             } catch (error) {
                 console.error("Error creating room:", error);
                 document.getElementById("status-message").innerHTML = "Error creating room. The ID might be taken.";
             }
         }
         
-        /**
-         * This function is the entry point, called after authentication succeeds.
-         * It checks the URL for a room ID and starts the correct view.
-         */
         function renderApp() {
             const urlParams = new URLSearchParams(window.location.search);
             const initialRoomId = urlParams.get('room');
 
             if (initialRoomId) {
-                // If a room is in the URL, try to listen to it
                 listenToRoom(initialRoomId);
             } else {
-                // Otherwise, show the setup view
                 renderSetupView();
             }
         }
 
         // ----------------------------------------------------------------------
-        // 🚀 5. INITIALIZATION (Authentication Check)
+        // 🚀 5. INITIALIZATION
         // ----------------------------------------------------------------------
 
-        /** Initializes Firebase and handles authentication. */
         function initializeFirebase() {
             document.getElementById("status-message").innerHTML = "Connecting to Firebase...";
 
-            // Listen for auth state changes (logs in anonymously if no user is found)
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    // User is signed in.
                     userId = user.uid;
-                    renderApp(); // Start the main application logic
+                    renderApp();
                 } else {
-                    // User is signed out, try to sign in anonymously.
                     try {
+                        // Logs in anonymously if user is signed out
                         await signInAnonymously(auth);
-                        // The onAuthStateChanged listener will fire again with the new user.
                     } catch (error) {
                         console.error("Anonymous Sign-In Failed:", error);
                         document.getElementById("status-message").innerHTML = "Authentication failed. Check Firebase config.";
@@ -387,7 +382,6 @@
             });
         }
 
-        // Start the process
         initializeFirebase();
 
     </script>
