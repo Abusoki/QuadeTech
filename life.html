@@ -146,7 +146,7 @@
             margin-left: 10px;
         }
 
-        /* --- Chat Styles (NEW) --- */
+        /* --- Chat Styles --- */
         #chat-container {
             margin-top: 20px;
             border-top: 1px solid #ddd;
@@ -213,6 +213,16 @@
             border-radius: 4px;
             margin-top: 15px;
         }
+        
+        /* NEW: Global delete button style */
+        #delete-all-rooms-btn {
+            background-color: #c0392b; /* Darker red for emphasis */
+            color: white;
+            padding: 10px 15px;
+            margin-top: 20px;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
@@ -247,14 +257,14 @@
         };
         const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
         const TIMEOUT_MINUTES = 25; 
+        const DELETE_ALL_PWD = "DeleteAllRooms"; // NEW: Global delete password
         
         // ----------------------------------------------------------------------
         // 2. IMPORTS
         // ----------------------------------------------------------------------
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp, arrayUnion, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { collection, getDocs, query, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"; // Import query methods separately
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp, arrayUnion, deleteDoc, collection, getDocs, query, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ----------------------------------------------------------------------
         // 3. GLOBALS
@@ -301,7 +311,6 @@
 
             chatLogDiv.innerHTML = '';
             
-            // Limit chat history to the last 20 messages
             const displayLog = chatLog.slice(-20); 
 
             displayLog.forEach(msg => {
@@ -312,9 +321,8 @@
                 senderSpan.classList.add('chat-sender');
                 senderSpan.textContent = `${msg.senderName}:`;
                 
-                // Highlight messages from the current player
                 if (msg.senderName === playerName) {
-                    senderSpan.style.color = '#3498db'; // Blue
+                    senderSpan.style.color = '#3498db'; 
                 }
 
                 messageDiv.appendChild(senderSpan);
@@ -322,7 +330,6 @@
                 chatLogDiv.appendChild(messageDiv);
             });
 
-            // Scroll to the bottom on new message
             chatLogDiv.scrollTop = chatLogDiv.scrollHeight;
         }
 
@@ -352,10 +359,6 @@
                 const player = roomData.players[playerId];
                 const isMe = playerId === userId;
                 
-                // --- Player Counters and Controls (Omitted for brevity, assumed unchanged) ---
-                // (Existing logic to generate player counters, life, and damage controls)
-                // ... (start player counter HTML block)
-
                 let lifeControls = '';
                 if (isMe) {
                     lifeControls = `
@@ -415,7 +418,7 @@
                 `;
             });
             
-            // --- Chat Container (NEW) ---
+            // --- Chat Container ---
             html += `
                 <div id="chat-container">
                     <h3 style="margin-bottom: 10px;">Game Chat</h3>
@@ -458,7 +461,6 @@
                 });
             });
 
-            // NEW: Chat form submission listener
             document.getElementById('chat-input-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 const input = document.getElementById('chat-message-input');
@@ -469,7 +471,6 @@
                 }
             });
 
-            // ... (Rest of listeners: leave, refresh, delete, dice, turn order, search modal) ...
             document.getElementById('leave-room-btn').addEventListener('click', () => {
                 if(unsubscribe) unsubscribe();
                 roomId = null;
@@ -502,7 +503,7 @@
             });
         }
         
-        // --- CHAT DATA UPDATE FUNCTION (NEW) ---
+        // --- CHAT DATA UPDATE FUNCTION ---
 
         async function sendChatMessage(message, senderName) {
             if (!roomId || !userId) return;
@@ -516,7 +517,6 @@
             };
             
             try {
-                // Use arrayUnion to atomically add the message to the chatLog array
                 await setDoc(ref, {
                     chatLog: arrayUnion(chatMessage),
                     lastActive: serverTimestamp()
@@ -528,7 +528,7 @@
         }
 
 
-        // --- DATA UPDATES (Remaining functions unchanged, except for import list) ---
+        // --- DATA UPDATES ---
 
         async function updateLife(delta) {
             if (!roomId || !userId) return;
@@ -578,10 +578,41 @@
             } catch(e) { console.error("Error updating commander damage:", e); }
         }
 
-        // --- SETUP & LIST VIEWS (Functions omitted for brevity, assumed unchanged) ---
+        // --- SETUP & LIST VIEWS ---
         
-        // ... (determineTurnOrder, deleteRoom, promptPassword, createRoom, listenToRoom, renderSetupView, modal logic) ...
-        
+        // NEW: Function to delete all rooms in the collection
+        async function deleteAllRooms() {
+            const password = prompt("Enter the global deletion password to confirm this action:");
+            
+            if (password !== DELETE_ALL_PWD) {
+                alert("Incorrect password. All rooms were NOT deleted.");
+                return;
+            }
+
+            if (!confirm("LAST WARNING: Are you absolutely sure you want to delete ALL rooms? This cannot be undone.")) {
+                return;
+            }
+
+            document.getElementById("status-message").textContent = "Deleting all rooms...";
+            const roomsRef = collection(db, ROOM_COLLECTION);
+            
+            try {
+                const snapshot = await getDocs(roomsRef);
+                let deleteCount = 0;
+
+                for (const docSnapshot of snapshot.docs) {
+                    await deleteDoc(doc(db, ROOM_COLLECTION, docSnapshot.id));
+                    deleteCount++;
+                }
+
+                alert(`Success! Deleted ${deleteCount} room(s).`);
+                renderSetupView(); // Refresh the view
+            } catch (e) {
+                console.error("Failed to delete all rooms:", e);
+                alert("An error occurred during bulk deletion. Check the console.");
+            }
+        }
+
         function determineTurnOrder(players) {
             const playerNames = Object.values(players).map(p => p.name || 'Unknown Player');
             
@@ -672,7 +703,7 @@
                     passwordHash: hashPassword(pwd),
                     createdAt: serverTimestamp(),
                     lastActive: serverTimestamp(),
-                    chatLog: [], // NEW: Initialize chat log
+                    chatLog: [], 
                     players: {
                         [userId]: { life: getStartingLife(), commanderDamage: {}, name: name, commander: commander }
                     }
@@ -727,7 +758,7 @@
                 </div>
                 <h3>Active Rooms</h3>
                 <div id="room-list-container">${listHtml}</div>
-            `;
+                <button id="delete-all-rooms-btn">Delete All Rooms (Admin)</button> `;
 
             try {
                 const q = query(collection(db, ROOM_COLLECTION), limit(15));
@@ -783,6 +814,9 @@
                     promptPassword(val, 'create');
                 }
             };
+            
+            // NEW: Listener for the global delete button
+            document.getElementById("delete-all-rooms-btn").addEventListener('click', deleteAllRooms);
         }
 
         // --- Card Search Modal Logic ---
