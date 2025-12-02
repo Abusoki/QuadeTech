@@ -145,6 +145,46 @@
             color: #2c3e50;
             margin-left: 10px;
         }
+
+        /* --- Chat Styles (NEW) --- */
+        #chat-container {
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+        }
+        #chat-log {
+            height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            background-color: #fcfcfc;
+            font-size: 0.9em;
+        }
+        .chat-message {
+            margin-bottom: 5px;
+            word-wrap: break-word;
+        }
+        .chat-sender {
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        #chat-input-form {
+            display: flex;
+            gap: 5px;
+        }
+        #chat-input-form input {
+            flex-grow: 1;
+            margin: 0;
+            padding: 8px;
+        }
+        #chat-input-form button {
+            width: auto;
+            padding: 8px 15px;
+            background-color: #3498db;
+            color: white;
+        }
         
         /* --- Modal for Card Search --- */
         .modal {
@@ -213,7 +253,8 @@
         // ----------------------------------------------------------------------
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp, collection, getDocs, query, limit, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp, arrayUnion, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { collection, getDocs, query, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"; // Import query methods separately
 
         // ----------------------------------------------------------------------
         // 3. GLOBALS
@@ -254,11 +295,43 @@
         // 5. GAME LOGIC & RENDERING
         // ----------------------------------------------------------------------
         
+        function renderChat(chatLog, playerName) {
+            const chatLogDiv = document.getElementById('chat-log');
+            if (!chatLogDiv) return;
+
+            chatLogDiv.innerHTML = '';
+            
+            // Limit chat history to the last 20 messages
+            const displayLog = chatLog.slice(-20); 
+
+            displayLog.forEach(msg => {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('chat-message');
+
+                const senderSpan = document.createElement('span');
+                senderSpan.classList.add('chat-sender');
+                senderSpan.textContent = `${msg.senderName}:`;
+                
+                // Highlight messages from the current player
+                if (msg.senderName === playerName) {
+                    senderSpan.style.color = '#3498db'; // Blue
+                }
+
+                messageDiv.appendChild(senderSpan);
+                messageDiv.appendChild(document.createTextNode(msg.message));
+                chatLogDiv.appendChild(messageDiv);
+            });
+
+            // Scroll to the bottom on new message
+            chatLogDiv.scrollTop = chatLogDiv.scrollHeight;
+        }
+
         function renderRoomView(roomData) {
             const appContainer = document.getElementById("app-container");
             const statusMessage = document.getElementById("status-message");
 
-            statusMessage.innerHTML = `Connected as: <strong>${roomData.players[userId]?.name || 'You'}</strong>`;
+            const currentPlayerName = roomData.players[userId]?.name || 'You';
+            statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
             
             let html = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
@@ -279,7 +352,10 @@
                 const player = roomData.players[playerId];
                 const isMe = playerId === userId;
                 
-                // --- Life Section ---
+                // --- Player Counters and Controls (Omitted for brevity, assumed unchanged) ---
+                // (Existing logic to generate player counters, life, and damage controls)
+                // ... (start player counter HTML block)
+
                 let lifeControls = '';
                 if (isMe) {
                     lifeControls = `
@@ -292,7 +368,6 @@
                     `;
                 }
 
-                // --- Commander Damage Section ---
                 let damageRows = '';
                 const opponents = playerIds.filter(id => id !== playerId);
                 
@@ -340,6 +415,18 @@
                 `;
             });
             
+            // --- Chat Container (NEW) ---
+            html += `
+                <div id="chat-container">
+                    <h3 style="margin-bottom: 10px;">Game Chat</h3>
+                    <div id="chat-log"></div>
+                    <form id="chat-input-form">
+                        <input type="text" id="chat-message-input" placeholder="Type message..." maxlength="150" required>
+                        <button type="submit">Send</button>
+                    </form>
+                </div>
+            `;
+            
             // --- Lobby Features ---
             html += `
                 <div id="lobby-features">
@@ -354,6 +441,10 @@
 
             appContainer.innerHTML = html;
             
+            // --- RENDER CHAT LOG ---
+            renderChat(roomData.chatLog || [], currentPlayerName);
+
+
             // --- ATTACH LISTENERS ---
             document.querySelectorAll('.btn-life').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -367,6 +458,18 @@
                 });
             });
 
+            // NEW: Chat form submission listener
+            document.getElementById('chat-input-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const input = document.getElementById('chat-message-input');
+                const message = input.value.trim();
+                if (message) {
+                    sendChatMessage(message, currentPlayerName);
+                    input.value = '';
+                }
+            });
+
+            // ... (Rest of listeners: leave, refresh, delete, dice, turn order, search modal) ...
             document.getElementById('leave-room-btn').addEventListener('click', () => {
                 if(unsubscribe) unsubscribe();
                 roomId = null;
@@ -399,6 +502,86 @@
             });
         }
         
+        // --- CHAT DATA UPDATE FUNCTION (NEW) ---
+
+        async function sendChatMessage(message, senderName) {
+            if (!roomId || !userId) return;
+            const ref = doc(db, ROOM_COLLECTION, roomId);
+
+            const chatMessage = {
+                senderId: userId,
+                senderName: senderName,
+                message: message,
+                timestamp: Date.now()
+            };
+            
+            try {
+                // Use arrayUnion to atomically add the message to the chatLog array
+                await setDoc(ref, {
+                    chatLog: arrayUnion(chatMessage),
+                    lastActive: serverTimestamp()
+                }, { merge: true });
+
+            } catch(e) { 
+                console.error("Error sending chat message:", e);
+            }
+        }
+
+
+        // --- DATA UPDATES (Remaining functions unchanged, except for import list) ---
+
+        async function updateLife(delta) {
+            if (!roomId || !userId) return;
+            const ref = doc(db, ROOM_COLLECTION, roomId);
+            try {
+                const snap = await getDoc(ref);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    const cur = data.players[userId]?.life ?? getStartingLife();
+                    
+                    await setDoc(ref, {
+                        players: { [userId]: { life: cur + delta } },
+                        lastActive: serverTimestamp()
+                    }, { merge: true });
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function updateCmdDamage(oppId, delta) {
+            if (!roomId || !userId) return;
+            const ref = doc(db, ROOM_COLLECTION, roomId);
+            try {
+                const snap = await getDoc(ref);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    
+                    const currentPlayer = data.players[userId];
+                    if (!currentPlayer) return;
+
+                    const currentDamageMap = currentPlayer.commanderDamage || {};
+                    const currentDamage = currentDamageMap[oppId] || 0;
+                    const newDamage = Math.max(0, currentDamage + delta);
+
+                    currentDamageMap[oppId] = newDamage;
+
+                    await setDoc(ref, {
+                        players: { 
+                            [userId]: { 
+                                ...currentPlayer,
+                                commanderDamage: currentDamageMap
+                            } 
+                        },
+                        lastActive: serverTimestamp()
+                    }, { merge: true });
+
+                }
+            } catch(e) { console.error("Error updating commander damage:", e); }
+        }
+
+        // --- SETUP & LIST VIEWS (Functions omitted for brevity, assumed unchanged) ---
+        
+        // ... (determineTurnOrder, deleteRoom, promptPassword, createRoom, listenToRoom, renderSetupView, modal logic) ...
+        
         function determineTurnOrder(players) {
             const playerNames = Object.values(players).map(p => p.name || 'Unknown Player');
             
@@ -407,7 +590,6 @@
                 return;
             }
 
-            // Simple shuffle algorithm (Fisher-Yates)
             for (let i = playerNames.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [playerNames[i], playerNames[j]] = [playerNames[j], playerNames[i]];
@@ -430,64 +612,6 @@
             }
         }
         
-        // --- DATA UPDATES ---
-
-        async function updateLife(delta) {
-            if (!roomId || !userId) return;
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            try {
-                const snap = await getDoc(ref);
-                if (snap.exists()) {
-                    const data = snap.data();
-                    const cur = data.players[userId]?.life ?? getStartingLife();
-                    
-                    // Updates ONLY the life property under the current user's ID
-                    await setDoc(ref, {
-                        players: { [userId]: { life: cur + delta } },
-                        lastActive: serverTimestamp()
-                    }, { merge: true });
-                }
-            } catch(e) { console.error(e); }
-        }
-
-        // FIX: Commander damage update logic rewritten for reliability
-        async function updateCmdDamage(oppId, delta) {
-            if (!roomId || !userId) return;
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            try {
-                const snap = await getDoc(ref);
-                if (snap.exists()) {
-                    const data = snap.data();
-                    
-                    // 1. Get the current player's data object
-                    const currentPlayer = data.players[userId];
-                    if (!currentPlayer) return;
-
-                    // 2. Safely read and update the commander damage for the specific opponent
-                    const currentDamageMap = currentPlayer.commanderDamage || {};
-                    const currentDamage = currentDamageMap[oppId] || 0;
-                    const newDamage = Math.max(0, currentDamage + delta);
-
-                    currentDamageMap[oppId] = newDamage;
-
-                    // 3. Write back the ENTIRE updated players object (only the current user is updated)
-                    await setDoc(ref, {
-                        players: { 
-                            [userId]: { 
-                                // Use the existing player data (name, life, etc.) and overwrite commanderDamage
-                                ...currentPlayer,
-                                commanderDamage: currentDamageMap
-                            } 
-                        },
-                        lastActive: serverTimestamp()
-                    }, { merge: true });
-
-                }
-            } catch(e) { console.error("Error updating commander damage:", e); }
-        }
-
-        // --- SETUP & LIST VIEWS ---
-
         function promptPassword(rid, mode) {
             const appContainer = document.getElementById("app-container");
             const title = mode === 'join' ? `Join ${rid}` : `Create ${rid}`;
@@ -522,7 +646,7 @@
                             return;
                         }
                         if(data.passwordHash === hashPassword(pwd)) {
-                            listenToRoom(rid, name, commander); // Pass name/cmd
+                            listenToRoom(rid, name, commander); 
                         } else {
                             document.getElementById("err-msg").textContent = "Wrong password.";
                         }
@@ -534,7 +658,7 @@
                         document.getElementById("err-msg").textContent = "Password too short.";
                         return;
                     }
-                    createRoom(rid, pwd, name, commander); // Pass name/cmd
+                    createRoom(rid, pwd, name, commander); 
                 }
             };
         }
@@ -548,6 +672,7 @@
                     passwordHash: hashPassword(pwd),
                     createdAt: serverTimestamp(),
                     lastActive: serverTimestamp(),
+                    chatLog: [], // NEW: Initialize chat log
                     players: {
                         [userId]: { life: getStartingLife(), commanderDamage: {}, name: name, commander: commander }
                     }
