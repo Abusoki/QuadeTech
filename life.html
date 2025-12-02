@@ -53,6 +53,39 @@
             border-radius: 3px;
             cursor: pointer;
         }
+        /* Player Counter Styling */
+        .player-counter {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .life-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .damage-section {
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+        .damage-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        .damage-total {
+            font-weight: bold;
+            width: 30px;
+            text-align: center;
+        }
+        .life-total {
+            font-size: 2em;
+            font-weight: bold;
+        }
         /* General Input/Button Styling */
         input[type="text"], input[type="password"] {
             width: 100%;
@@ -73,18 +106,15 @@
             color: white;
             cursor: pointer;
         }
-        #cancel-btn {
+        #cancel-btn, #leave-room-btn {
             background-color: #f44336;
         }
-        .life-control button {
+        .life-control button, .damage-control button {
             width: auto;
             padding: 5px 10px;
-            font-size: 1.2em;
+            font-size: 1em;
             margin: 0 2px;
-        }
-        .life-total {
-            font-size: 2em;
-            font-weight: bold;
+            background-color: #007bff;
         }
         #status-message {
             color: #333;
@@ -134,7 +164,8 @@
             collection,
             getDocs,
             query,
-            limit
+            limit,
+            deleteDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ----------------------------------------------------------------------
@@ -148,23 +179,71 @@
         let roomId = null;
         let unsubscribe = null;
         const ROOM_COLLECTION = "mtg_rooms";
+        const TIMEOUT_MINUTES = 25; // Rooms timeout after 25 minutes of inactivity
 
         // ----------------------------------------------------------------------
         // 🔒 4. PASSWORD HASHING FUNCTION
         // ----------------------------------------------------------------------
 
-        /** Calculates a simple SHA256 hash of the password (for front-end validation only). */
         function hashPassword(password) {
-            // CryptoJS is available globally because it was included in a script tag
             return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
         }
 
         // ----------------------------------------------------------------------
-        // 🧩 5. CORE FUNCTIONS (Modified)
+        // 🗑️ 5. ROOM CLEANUP LOGIC (New Feature)
+        // ----------------------------------------------------------------------
+
+        /**
+         * Checks if a room has expired based on the lastActive timestamp.
+         * If expired, deletes the room and redirects to setup.
+         * @param {string} id - The room ID to check.
+         * @param {object} roomData - The current room data.
+         * @returns {boolean} - True if the room was deleted, false otherwise.
+         */
+        async function checkAndDeleteIfExpired(id, roomData) {
+            const lastActive = roomData.lastActive?.toDate();
+            const currentTime = new Date();
+            
+            if (lastActive) {
+                const elapsedMinutes = (currentTime.getTime() - lastActive.getTime()) / (1000 * 60);
+                
+                if (elapsedMinutes > TIMEOUT_MINUTES) {
+                    console.log(`Room ${id} expired after ${elapsedMinutes.toFixed(2)} minutes.`);
+                    document.getElementById("status-message").innerHTML = `Room ${id} expired due to inactivity. Deleting...`;
+                    
+                    try {
+                        await deleteDoc(doc(db, ROOM_COLLECTION, id));
+                    } catch (e) {
+                        console.error("Error deleting expired room:", e);
+                    }
+                    
+                    if (unsubscribe) unsubscribe();
+                    roomId = null;
+                    renderSetupView();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ----------------------------------------------------------------------
+        // 🧩 6. CORE GAME LOGIC (Modified)
         // ----------------------------------------------------------------------
 
         function getStartingLife() {
             return 40; 
+        }
+
+        /** Creates the initial commander damage object for a new player */
+        function getStartingCommanderDamage(playerIds) {
+            const damage = {};
+            playerIds.forEach(id => {
+                if (id !== userId) {
+                    // Initialize damage taken from other commanders to 0
+                    damage[id] = 0; 
+                }
+            });
+            return damage;
         }
 
         function renderRoomView(roomData) {
@@ -176,40 +255,75 @@
                 return;
             }
 
-            statusMessage.innerHTML = `Room ID: <strong>${roomId}</strong> | ${roomData.ownerId === userId ? 'You are the Owner' : 'Connected'}`;
+            statusMessage.innerHTML = `Room ID: <strong>${roomId}</strong> | Inactive in: ${TIMEOUT_MINUTES} min.`;
             
             let html = `<h2>Current Game State</h2>`;
+            const playerIds = Object.keys(roomData.players);
 
-            Object.keys(roomData.players).forEach(playerId => {
+            playerIds.forEach(playerId => {
                 const player = roomData.players[playerId];
                 const isCurrentPlayer = playerId === userId;
                 
-                html += `
-                    <div class="player-counter" id="player-${playerId}">
+                // --- Life Section ---
+                let lifeHtml = `
+                    <div class="life-section">
                         <div>
                             <p><strong>${isCurrentPlayer ? 'You' : `Player (${playerId.substring(0, 4)}...)`}</strong></p>
                             <p>Life: <span class="life-total">${player.life}</span></p>
                         </div>
                         ${isCurrentPlayer ? `
                             <div class="life-control">
-                                <button data-player-id="${playerId}" data-delta="-5">-5</button>
-                                <button data-player-id="${playerId}" data-delta="-1">-1</button>
-                                <button data-player-id="${playerId}" data-delta="+1">+1</button>
-                                <button data-player-id="${playerId}" data-delta="+5">+5</button>
+                                <button data-player-id="${playerId}" data-type="life" data-delta="-5">-5</button>
+                                <button data-player-id="${playerId}" data-type="life" data-delta="-1">-1</button>
+                                <button data-player-id="${playerId}" data-type="life" data-delta="+1">+1</button>
+                                <button data-player-id="${playerId}" data-type="life" data-delta="+5">+5</button>
                             </div>
                         ` : ''}
                     </div>
                 `;
+
+                // --- Commander Damage Section ---
+                let damageHtml = `<div class="damage-section"><h4>Commander Damage Taken:</h4>`;
+                
+                // List damage taken from *other* players' commanders
+                const opponents = playerIds.filter(id => id !== playerId);
+
+                if (opponents.length === 0) {
+                     damageHtml += '<p>No opponents yet.</p>';
+                } else {
+                    opponents.forEach(opponentId => {
+                        const damage = player.commanderDamage?.[opponentId] || 0;
+
+                        damageHtml += `
+                            <div class="damage-row">
+                                <span>From ${opponentId.substring(0, 4)}...:</span>
+                                <span class="damage-total">${damage}</span>
+                                ${isCurrentPlayer ? `
+                                    <div class="damage-control">
+                                        <button data-player-id="${playerId}" data-opponent-id="${opponentId}" data-type="commander" data-delta="-1">-1</button>
+                                        <button data-player-id="${playerId}" data-opponent-id="${opponentId}" data-type="commander" data-delta="+1">+1</button>
+                                    </div>
+                                ` : `<div style="width: 70px;"></div>`}
+                            </div>
+                        `;
+                    });
+                }
+                damageHtml += `</div>`;
+
+                html += `<div class="player-counter" id="player-${playerId}">${lifeHtml}${damageHtml}</div>`;
             });
 
-            // Add button to return to setup (e.g., to join another room)
             html += `<button id="leave-room-btn" style="background-color: #6c757d;">Leave Room</button>`;
 
             appContainer.innerHTML = html;
             
-            if (document.querySelector('.life-control')) {
+            // Add listeners for ALL buttons
+            if (isCurrentPlayer) {
                 document.querySelectorAll('.life-control button').forEach(button => {
-                    button.addEventListener('click', handleLifeChange);
+                    button.addEventListener('click', (e) => handleUpdate(e, 'life'));
+                });
+                document.querySelectorAll('.damage-control button').forEach(button => {
+                    button.addEventListener('click', (e) => handleUpdate(e, 'commander'));
                 });
             }
 
@@ -220,16 +334,20 @@
             });
         }
 
-        function handleLifeChange(e) {
+        /** Handles all life and commander damage updates from button clicks */
+        function handleUpdate(e, type) {
             const delta = parseInt(e.target.dataset.delta, 10);
-            updateLife(delta);
+            if (type === 'life') {
+                updateLife(delta);
+            } else if (type === 'commander') {
+                const opponentId = e.target.dataset.opponentId;
+                updateCommanderDamage(opponentId, delta);
+            }
         }
         
+        // FIX for #1: Ensure correct path to life total is read
         async function updateLife(delta) {
-            if (!roomId || !userId) {
-                console.error("Room or User ID is missing.");
-                return;
-            }
+            if (!roomId || !userId) return;
 
             const roomRef = doc(db, ROOM_COLLECTION, roomId);
 
@@ -237,12 +355,14 @@
                 const roomSnap = await getDoc(roomRef);
                 if (roomSnap.exists()) {
                     const roomData = roomSnap.data();
-                    const currentLife = roomData.players[userId]?.life ?? getStartingLife(); 
+                    
+                    // FIX: Get life total from the nested structure
+                    const currentLife = roomData.players?.[userId]?.life ?? getStartingLife(); 
                     const newLife = currentLife + delta;
                     
                     const updatePayload = {};
                     updatePayload[`players.${userId}.life`] = newLife;
-                    updatePayload.lastUpdated = serverTimestamp();
+                    updatePayload.lastActive = serverTimestamp(); // NEW: Update activity timestamp
 
                     await setDoc(roomRef, updatePayload, { merge: true });
                 }
@@ -250,8 +370,134 @@
                 console.error("Error updating life:", error);
             }
         }
+
+        // NEW FEATURE: Update commander damage
+        async function updateCommanderDamage(opponentId, delta) {
+            if (!roomId || !userId) return;
+            
+            const roomRef = doc(db, ROOM_COLLECTION, roomId);
+
+            try {
+                const roomSnap = await getDoc(roomRef);
+                if (roomSnap.exists()) {
+                    const roomData = roomSnap.data();
+                    
+                    // Read current damage from specific opponent
+                    const currentDamage = roomData.players?.[userId]?.commanderDamage?.[opponentId] ?? 0;
+                    const newDamage = Math.max(0, currentDamage + delta); // Damage cannot go below 0
+
+                    const updatePayload = {};
+                    // Path: players.[userId].commanderDamage.[opponentId]
+                    updatePayload[`players.${userId}.commanderDamage.${opponentId}`] = newDamage;
+                    updatePayload.lastActive = serverTimestamp(); // NEW: Update activity timestamp
+
+                    await setDoc(roomRef, updatePayload, { merge: true });
+                }
+            } catch (error) {
+                console.error("Error updating commander damage:", error);
+            }
+        }
         
-        // NEW VIEW: Prompts user for password to join selected room
+        // --- Setup and Flow Functions (Minimal changes to integrate new logic) ---
+
+        function listenToRoom(id) {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+
+            const roomRef = doc(db, ROOM_COLLECTION, id);
+            
+            unsubscribe = onSnapshot(roomRef, async (docSnap) => {
+                if (docSnap.exists()) {
+                    const roomData = docSnap.data();
+                    
+                    // NEW: Check for room expiry immediately upon receiving data
+                    if (await checkAndDeleteIfExpired(id, roomData)) {
+                        return; // Stop processing if the room was deleted
+                    }
+
+                    if (roomData.players && roomData.players[userId]) {
+                        roomId = id;
+                        renderRoomView(roomData);
+                    } else {
+                        roomId = id;
+                        // User is verified, but not in player list. Join them automatically.
+                        joinRoom(id, roomData); 
+                    }
+                } else {
+                    // Room does not exist (e.g., deleted by checkAndDeleteIfExpired or manual delete)
+                    if (unsubscribe) unsubscribe();
+                    roomId = null; 
+                    renderSetupView();
+                }
+            }, (error) => {
+                console.error("Firestore listener error:", error);
+                document.getElementById("status-message").innerHTML = `Error accessing room: ${error.message}`;
+                renderSetupView(); 
+            });
+        }
+        
+        async function joinRoom(id, roomData) {
+            if (!userId) return;
+            
+            const roomRef = doc(db, ROOM_COLLECTION, id);
+            
+            // Get all current player IDs to correctly initialize commander damage
+            const currentPlayerIds = Object.keys(roomData.players || {});
+            currentPlayerIds.push(userId); // Include the user being added
+
+            const playerPayload = {
+                life: getStartingLife(),
+                joinedAt: serverTimestamp(),
+                // NEW: Initialize commander damage for the new player
+                commanderDamage: getStartingCommanderDamage(currentPlayerIds) 
+            };
+            
+            const updatePayload = {};
+            updatePayload[`players.${userId}`] = playerPayload;
+            updatePayload.lastActive = serverTimestamp(); // NEW: Update activity timestamp
+
+            try {
+                await setDoc(roomRef, updatePayload, { merge: true });
+                // Note: The listener will update the UI after this write.
+            } catch (error) {
+                console.error("Error joining room:", error);
+                document.getElementById("status-message").innerHTML = "Error joining room. Try again.";
+            }
+        }
+        
+        async function createNewRoom(id, password) {
+            if (!userId) return;
+
+            const roomRef = doc(db, ROOM_COLLECTION, id);
+            
+            const initialRoomData = {
+                roomId: id,
+                ownerId: userId,
+                passwordHash: hashPassword(password), 
+                createdAt: serverTimestamp(),
+                lastActive: serverTimestamp(), // NEW: Initial activity timestamp
+                players: {
+                    [userId]: {
+                        life: getStartingLife(),
+                        joinedAt: serverTimestamp(),
+                        // NEW: Initial commander damage (will be empty since there are no opponents yet)
+                        commanderDamage: {} 
+                    }
+                }
+            };
+            
+            try {
+                await setDoc(roomRef, initialRoomData, { merge: false });
+                listenToRoom(id); 
+            } catch (error) {
+                console.error("Error creating room:", error);
+                document.getElementById("status-message").innerHTML = "Error creating room. The ID might be taken.";
+            }
+        }
+        
+        // --- Unchanged Flow and Setup Functions (Omitted for brevity, but remain the same) ---
+        
         function promptForPassword(id) {
             const appContainer = document.getElementById("app-container");
             document.getElementById("status-message").innerHTML = `Enter password for <strong>${id}</strong>.`;
@@ -273,9 +519,7 @@
 
                 if (roomSnap.exists()) {
                     const roomData = roomSnap.data();
-                    // 🔒 Check password hash
                     if (roomData.passwordHash === hashPassword(password)) {
-                        // Password correct! Start listening and join.
                         listenToRoom(id); 
                     } else {
                         document.getElementById('password-error').textContent = "Incorrect password.";
@@ -290,14 +534,13 @@
             });
         }
 
-        // MODIFIED: When creating, now prompts for password
         function promptToCreateRoom(id) {
             const appContainer = document.getElementById("app-container");
             document.getElementById("status-message").innerHTML = `Room <strong>${id}</strong> not found. Set up a new one.`;
 
             appContainer.innerHTML = `
                 <h2>Create Room: ${id}</h2>
-                <input type="password" id="new-room-password" placeholder="Set Room Password">
+                <input type="password" id="new-room-password" placeholder="Set Room Password (min 4 chars)">
                 <button id="create-new-room-btn">Create Room ${id}</button>
                 <button id="cancel-btn">Cancel</button>
             `;
@@ -315,67 +558,12 @@
                 renderSetupView();
             });
         }
-
-        // MODIFIED: Now requires user to enter password *before* listenToRoom is called
-        function listenToRoom(id) {
-            if (unsubscribe) {
-                unsubscribe();
-            }
-
-            const roomRef = doc(db, ROOM_COLLECTION, id);
-            
-            unsubscribe = onSnapshot(roomRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const roomData = docSnap.data();
-                    
-                    if (roomData.players && roomData.players[userId]) {
-                        roomId = id;
-                        renderRoomView(roomData);
-                    } else {
-                        // Room exists, but user isn't in it. Add them automatically.
-                        roomId = id;
-                        joinRoom(id); 
-                    }
-                } else {
-                    // This should only happen if a room is deleted while listening
-                    if (unsubscribe) unsubscribe();
-                    roomId = null; 
-                    renderSetupView();
-                }
-            }, (error) => {
-                console.error("Firestore listener error:", error);
-                document.getElementById("status-message").innerHTML = `Error accessing room: ${error.message}`;
-                renderSetupView(); 
-            });
-        }
         
-        async function joinRoom(id) {
-            if (!userId) return;
-            
-            const roomRef = doc(db, ROOM_COLLECTION, id);
-            const playerPayload = {
-                life: getStartingLife(),
-                joinedAt: serverTimestamp()
-            };
-
-            const updatePayload = {};
-            updatePayload[`players.${userId}`] = playerPayload;
-
-            try {
-                await setDoc(roomRef, updatePayload, { merge: true });
-            } catch (error) {
-                console.error("Error joining room:", error);
-                document.getElementById("status-message").innerHTML = "Error joining room. Try again.";
-            }
-        }
-        
-        // MODIFIED: Fetches and displays room list, and changes interaction flow
         async function renderSetupView() {
             const appContainer = document.getElementById("app-container");
             roomId = null; 
             document.getElementById("status-message").innerHTML = "Select a room below or search to create a new one.";
 
-            // 1. Fetch available rooms
             const roomsQuery = query(collection(db, ROOM_COLLECTION), limit(20));
             let roomListHtml = '';
             try {
@@ -384,8 +572,14 @@
                     roomListHtml = '<p>No active rooms found.</p>';
                 } else {
                     querySnapshot.forEach(doc => {
-                        const roomData = doc.data();
                         const roomID = doc.id;
+                        const roomData = doc.data();
+                        
+                        // NEW: Check for expiry before showing
+                        if (checkAndDeleteIfExpired(roomID, roomData)) {
+                             return; // Skip expired room
+                        }
+
                         const playerCount = Object.keys(roomData.players || {}).length;
                         roomListHtml += `
                             <div class="room-item" data-room-id="${roomID}">
@@ -410,9 +604,6 @@
                 <div id="room-list">${roomListHtml}</div>
             `;
 
-            // 2. Add Event Listeners for room list and search
-            
-            // Listeners for the Join buttons on the list
             document.getElementById('room-list').querySelectorAll('button').forEach(button => {
                 button.addEventListener('click', (e) => {
                     const selectedRoomId = e.target.dataset.roomId;
@@ -420,7 +611,6 @@
                 });
             });
 
-            // Listener for the main search/create button
             document.getElementById('search-btn').addEventListener('click', async () => {
                 const input = document.getElementById('room-search').value.trim().toLowerCase();
                 if (!input) {
@@ -428,59 +618,20 @@
                     return;
                 }
                 
-                // Check if room exists
                 const roomRef = doc(db, ROOM_COLLECTION, input);
                 const roomSnap = await getDoc(roomRef);
 
                 if (roomSnap.exists()) {
-                    // Room exists, go to password prompt
                     promptForPassword(input);
                 } else {
-                    // Room does not exist, go to create prompt
                     promptToCreateRoom(input);
                 }
             });
         }
-
-        // MODIFIED: Now saves a hashed password
-        async function createNewRoom(id, password) {
-            if (!userId) return;
-
-            const roomRef = doc(db, ROOM_COLLECTION, id);
-            
-            const initialRoomData = {
-                roomId: id,
-                ownerId: userId,
-                // 🔒 NEW: Store the hash of the password
-                passwordHash: hashPassword(password), 
-                createdAt: serverTimestamp(),
-                lastUpdated: serverTimestamp(),
-                players: {
-                    [userId]: {
-                        life: getStartingLife(),
-                        joinedAt: serverTimestamp()
-                    }
-                }
-            };
-            
-            try {
-                await setDoc(roomRef, initialRoomData, { merge: false });
-                // If successful, start listening to the room
-                listenToRoom(id); 
-            } catch (error) {
-                console.error("Error creating room:", error);
-                document.getElementById("status-message").innerHTML = "Error creating room. The ID might be taken.";
-            }
-        }
         
         function renderApp() {
-            // No longer check URL parameters, always start at the setup view.
             renderSetupView();
         }
-
-        // ----------------------------------------------------------------------
-        // 🚀 6. INITIALIZATION
-        // ----------------------------------------------------------------------
 
         function initializeFirebase() {
             document.getElementById("status-message").innerHTML = "Connecting to Firebase...";
