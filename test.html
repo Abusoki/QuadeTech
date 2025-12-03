@@ -90,7 +90,7 @@
         .player-sub{font-size:.85rem;color:var(--muted)}
         .life-big{font-size:3.2rem;font-weight:900;color:var(--text);letter-spacing:-1px}
         .controls{display:flex;gap:8px;flex-wrap:wrap}
-        .control-btn{padding:8px 12px;border-radius:8px;font-weight:800;min-width:56px;text-align:center;background:linear-gradient(180deg,#2b2b2b,#232323);color:var(--text);border:1px solid rgba(255,255,255,0.03);cursor:pointer}
+        .control-btn{padding:8px 12px;border-radius:8px;font-weight:800;min-width:56px;text-align:center;background:linear-gradient(180deg,#2b2b2b,#232323);color:var(--text);border:1px solid rgba(255,255,255,0.03);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
         .control-btn.positive{background:linear-gradient(180deg,#2ecc71,#27ae60);color:#04260a}
         .control-btn.negative{background:linear-gradient(180deg,#ff6b6b,#c0392b);color:#2b0706}
         .control-btn:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.2)}
@@ -102,6 +102,11 @@
         /* --- CMD controls persistent area --- */
         .cmd-controls{display:none;margin-top:10px}
         .cmd-controls.open{display:block}
+
+        /* --- Infect small tracker --- */
+        .infect-block{margin-top:8px;display:flex;align-items:center;gap:8px}
+        .infect-label{font-size:0.85rem;color:var(--muted)}
+        .infect-value{font-weight:800;color:#bfe6a8}
 
         /* --- Chat area --- */
         #chat-log{height:150px;overflow-y:auto;border:1px solid rgba(255,255,255,0.03);padding:10px;margin-bottom:10px;border-radius:8px;background:#0f1113;font-size:.9em}
@@ -150,6 +155,24 @@
         .muted{color:var(--muted)}
         .row{display:flex;gap:8px;align-items:center}
         .col{display:flex;flex-direction:column;gap:8px}
+
+        /* --- Preview button specific styling to center text/icon --- */
+        .control-btn.preview {
+            padding:8px 10px;
+            min-width:72px;
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            gap:8px;
+        }
+        .control-btn.preview .preview-icon {
+            width:16px;
+            height:16px;
+            display:inline-block;
+            background:linear-gradient(180deg,#fff, #ddd);
+            border-radius:3px;
+            box-shadow:inset 0 -1px 0 rgba(0,0,0,0.15);
+        }
 
         @media(max-width:720px){header.app-header{flex-direction:column;align-items:flex-start;gap:8px}#lobby-card-preview{display:none!important}#chat-card-preview{display:none!important}}
     </style>
@@ -253,6 +276,9 @@
         let autocompleteTimeout = null;
         const ROOM_COLLECTION = "mtg_rooms";
 
+        // Track which players' CMD controls are open (persist across renders)
+        const openCmdControls = new Set();
+
         // ----------------------------------------------------------------------
         // HELPERS
         // ----------------------------------------------------------------------
@@ -332,8 +358,8 @@
         async function renderHome(){ await renderSetupView(); }
 
         const CHANGELOG = [
-            { version: "0.9.3", date: "2025-12-03", notes: "CMD DMG toggle persistence and improved Card Search posting to chat." },
-            { version: "0.9.2", date: "2025-11-30", notes: "Fixed hover preview and removed stray focus outlines; improved suggestions styling." }
+            { version: "0.9.4", date: "2025-12-04", notes: "Persistent CMD panels, infect tracking, per-target commander damage editing, preview styling." },
+            { version: "0.9.3", date: "2025-12-03", notes: "CMD DMG toggle persistence and improved Card Search posting to chat." }
         ];
 
         function renderChanges(){
@@ -507,7 +533,6 @@
                     });
                     // also show on click for touch devices
                     cardSpan.addEventListener('click', (e)=>{
-                        // toggle preview
                         const preview = document.getElementById('chat-card-preview');
                         if(preview.style.display === 'block') hideChatCardPreviewImmediate();
                         else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName);
@@ -578,6 +603,28 @@
                 const isMe = playerId === userId;
                 const life = player.life ?? getStartingLife();
                 const commanderName = player.commanderName || player.commander || 'N/A';
+                const infectVal = player.infect || 0;
+
+                // Build per-opponent commander damage rows for this player
+                let perOppRows = '';
+                const opponents = playerIds.filter(id => id !== playerId);
+                if(opponents.length > 0){
+                    opponents.forEach(oppId => {
+                        const dmg = (player.commanderDamage && player.commanderDamage[oppId]) || 0;
+                        const oppName = roomData.players[oppId]?.name || 'Player';
+                        perOppRows += `
+                            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
+                                <div style="font-size:0.9em;color:var(--muted);">From <strong>${oppName}</strong></div>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <button class="control-btn negative" data-action="cmd-target-sub" data-target="${playerId}" data-opp="${oppId}">-</button>
+                                    <input type="number" value="${dmg}" data-target="${playerId}" data-opp="${oppId}" class="cmd-target-input" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center">
+                                    <button class="control-btn negative" data-action="cmd-target-add" data-target="${playerId}" data-opp="${oppId}">+</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
                 html += `
                     <div class="player-panel" data-player-id="${playerId}">
                         <div class="player-header">
@@ -594,10 +641,11 @@
                         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
                             <div>
                                 <div class="life-big" id="life-display-${playerId}">${life}</div>
+
                                 <div style="margin-top:8px">
                                     <div class="cmd-block">
                                         <div>
-                                            <div class="cmd-label">CMD DMG</div>
+                                            <div class="cmd-label">CMD DMG (incoming)</div>
                                             <div class="cmd-value" id="cmd-total-${playerId}">${computeIncomingCmdDamage(roomData, playerId)}</div>
                                         </div>
                                         <div style="text-align:right">
@@ -605,32 +653,40 @@
                                             <div style="font-weight:700;color:var(--muted);font-size:.85rem">${commanderName}</div>
                                         </div>
                                     </div>
+
+                                    <div class="infect-block">
+                                        <div class="infect-label">Infect</div>
+                                        <div class="infect-value" id="infect-${playerId}">${infectVal}</div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div style="min-width:160px;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+                            <div style="min-width:220px;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
                                 <div class="controls" style="flex-direction:column;width:100%">
                                     <div style="display:flex;gap:8px;width:100%">
-                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-5" ${isMe ? '' : 'disabled'}>-5</button>
-                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-1" ${isMe ? '' : 'disabled'}>-1</button>
-                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+1" ${isMe ? '' : 'disabled'}>+1</button>
-                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+5" ${isMe ? '' : 'disabled'}>+5</button>
+                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-5" ${isMe ? '' : ''}>-5</button>
+                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-1" ${isMe ? '' : ''}>-1</button>
+                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+1" ${isMe ? '' : ''}>+1</button>
+                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+5" ${isMe ? '' : ''}>+5</button>
                                     </div>
                                     <div style="display:flex;gap:8px;width:100%">
-                                        <button class="control-btn" data-action="cmd-toggle" data-player="${playerId}" ${isMe ? '' : 'disabled'}>CMD DMG</button>
-                                        <button class="control-btn" data-action="show-commander" data-player="${playerId}">Preview</button>
+                                        <button class="control-btn" data-action="cmd-toggle" data-player="${playerId}" ${isMe ? '' : ''}>CMD DMG</button>
+                                        <button class="control-btn preview" data-action="show-commander" data-player="${playerId}"><span class="preview-icon" aria-hidden="true"></span><span style="font-weight:700">Preview</span></button>
                                         ${isMe ? `<button class="control-btn" data-action="edit-commander" data-player="${playerId}">Edit Commander</button>` : ''}
+                                    </div>
+                                    <div style="display:flex;gap:8px;width:100%;margin-top:6px;align-items:center">
+                                        <button class="control-btn" data-action="infect-sub" data-player="${playerId}">-</button>
+                                        <div style="font-size:0.9em;color:var(--muted);">Adjust Infect</div>
+                                        <button class="control-btn" data-action="infect-add" data-player="${playerId}">+</button>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <div class="cmd-controls" id="cmd-controls-${playerId}">
-                            <div style="display:flex;gap:8px;align-items:center">
-                                <input type="number" id="cmd-input-${playerId}" placeholder="Enter damage" style="width:120px;padding:8px;border-radius:8px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text)">
-                                <button class="control-btn negative" data-action="cmd-set" data-player="${playerId}" ${isMe ? '' : 'disabled'}>Set</button>
-                                <button class="control-btn negative" data-action="cmd-add" data-player="${playerId}" ${isMe ? '' : 'disabled'}>+1</button>
-                                <button class="control-btn negative" data-action="cmd-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-1</button>
+                            <div style="display:flex;flex-direction:column;gap:8px">
+                                <div style="font-weight:700;color:var(--muted);font-size:0.9em">Adjust damage taken by this player from other commanders</div>
+                                ${perOppRows}
                             </div>
                         </div>
                     </div>
@@ -670,20 +726,33 @@
             // render chat
             renderChat(roomData.chatLog || [], currentPlayerName);
 
+            // reapply openCmdControls state after render
+            const playerIdsAfter = Object.keys(roomData.players || {});
+            playerIdsAfter.forEach(pid => {
+                const controls = document.getElementById(`cmd-controls-${pid}`);
+                if(controls){
+                    if(openCmdControls.has(pid)) controls.classList.add('open');
+                    else controls.classList.remove('open');
+                }
+            });
+
             // attach listeners for controls
             document.querySelectorAll('.control-btn').forEach(btn=>{
-                btn.addEventListener('click', (e)=>{
+                btn.addEventListener('click', async (e)=>{
                     const action = btn.dataset.action;
                     const targetPlayer = btn.dataset.player;
                     const delta = parseInt(btn.dataset.delta || '0');
 
                     if(action === 'life'){
-                        if(targetPlayer === userId) updateLife(delta);
+                        // allow editing life for any player (you can adjust any player's life)
+                        await updateLifeForPlayer(targetPlayer, delta);
                     } else if(action === 'cmd-toggle'){
                         // persistent toggle: open/close and remain until toggled again
                         const controls = document.getElementById(`cmd-controls-${targetPlayer}`);
                         if(!controls) return;
-                        controls.classList.toggle('open');
+                        const isOpen = controls.classList.toggle('open');
+                        if(isOpen) openCmdControls.add(targetPlayer);
+                        else openCmdControls.delete(targetPlayer);
                     } else if(action === 'show-commander'){
                         const imgUrl = roomData.players[targetPlayer]?.commanderImageUrl;
                         const previewCard = document.getElementById('lobby-card-preview');
@@ -694,17 +763,43 @@
                             setTimeout(()=>{ previewCard.style.display = 'none'; previewImg.src = ''; }, 3500);
                         }
                     } else if(action === 'edit-commander'){
-                        // open edit modal prefilled with current commander name
                         const currentName = roomData.players[targetPlayer]?.commanderName || roomData.players[targetPlayer]?.commander || '';
                         openEditCommanderModal(currentName);
                     } else if(action === 'cmd-set'){
-                        const input = document.getElementById(`cmd-input-${targetPlayer}`);
-                        if(input){ const val = parseInt(input.value) || 0; updateCmdDamageDirectly(targetPlayer, val); }
-                    } else if(action === 'cmd-add'){ updateCmdDamage(targetPlayer, +1); }
-                    else if(action === 'cmd-sub'){ updateCmdDamage(targetPlayer, -1); }
+                        // not used in this layout
+                    } else if(action === 'cmd-add'){
+                        // not used in this layout
+                    } else if(action === 'cmd-sub'){
+                        // not used in this layout
+                    } else if(action === 'cmd-target-add'){
+                        const t = btn.dataset.target;
+                        const opp = btn.dataset.opp;
+                        await updateCmdDamageForTarget(t, opp, +1);
+                    } else if(action === 'cmd-target-sub'){
+                        const t = btn.dataset.target;
+                        const opp = btn.dataset.opp;
+                        await updateCmdDamageForTarget(t, opp, -1);
+                    } else if(action === 'infect-add'){
+                        const t = btn.dataset.player;
+                        await updateInfect(t, +1);
+                    } else if(action === 'infect-sub'){
+                        const t = btn.dataset.player;
+                        await updateInfect(t, -1);
+                    }
                 });
             });
 
+            // attach inputs for per-target direct edits
+            document.querySelectorAll('.cmd-target-input').forEach(input => {
+                input.addEventListener('change', async (e) => {
+                    const target = input.dataset.target;
+                    const opp = input.dataset.opp;
+                    const val = parseInt(input.value) || 0;
+                    await updateCmdDamageForTargetDirectly(target, opp, val);
+                });
+            });
+
+            // attach infect display updates (inputs not used here)
             // chat submit
             const chatForm = document.getElementById('chat-input-form');
             if(chatForm){
@@ -733,7 +828,7 @@
 
             // restart game
             document.getElementById('restart-game-btn').addEventListener('click', async ()=>{
-                if(!confirm("Restart game: reset all players' life to default and clear all commander damage?")) return;
+                if(!confirm("Restart game: reset all players' life to default and clear all commander damage and infect?")) return;
                 await restartGame();
             });
 
@@ -764,18 +859,9 @@
                 else modalSuggestionsList.innerHTML = '';
             });
 
-            // close preview when clicking outside
+            // close preview when clicking outside (no auto-close of cmd-controls)
             document.addEventListener('click', (e)=>{
-                // do not auto-close cmd-controls; they are persistent until toggled
-                // hide lobby preview if clicking outside preview and not hovering preview
-                const previewCard = document.getElementById('lobby-card-preview');
-                if(previewCard && previewCard.style.display === 'block'){
-                    const rect = previewCard.getBoundingClientRect();
-                    if(!(e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom)){
-                        // don't hide if user clicked a "Preview" button (handled separately)
-                        // keep as-is
-                    }
-                }
+                // keep cmd-controls open until toggled
             });
         }
 
@@ -798,73 +884,74 @@
             catch(e){ console.error("Error posting system card to chat:", e); }
         }
 
-        async function updateLifeDirectly(newValue){
-            if(!roomId || !userId) return;
+        async function updateLifeForPlayer(targetPlayerId, delta){
+            if(!roomId) return;
             const ref = doc(db, ROOM_COLLECTION, roomId);
-            const newLife = parseInt(newValue) || 0;
-            try{
-                const snap = await getDoc(ref);
-                if(!snap.exists()) return;
-                await setDoc(ref, { players: { [userId]: { life: newLife } }, lastActive: serverTimestamp() }, { merge: true });
-            }catch(e){ console.error("Error setting life total directly:", e); }
-        }
-
-        async function updateLife(delta){
-            if(!roomId || !userId) return;
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            try{
-                const snap = await getDoc(ref);
-                if(snap.exists()){
-                    const data = snap.data();
-                    const cur = data.players[userId]?.life ?? getStartingLife();
-                    await updateLifeDirectly(cur + delta);
-                }
-            }catch(e){ console.error(e); }
-        }
-
-        async function updateCmdDamage(oppId, delta){
-            if(!roomId || !userId) return;
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            try{
-                const snap = await getDoc(ref);
-                if(snap.exists()){
-                    const data = snap.data();
-                    const currentPlayer = data.players[userId];
-                    if(!currentPlayer) return;
-                    const currentDamageMap = currentPlayer.commanderDamage || {};
-                    const currentDamage = currentDamageMap[oppId] || 0;
-                    const newDamage = Math.max(0, currentDamage + delta);
-                    await updateCmdDamageDirectly(oppId, newDamage);
-                }
-            }catch(e){ console.error("Error updating commander damage:", e); }
-        }
-
-        async function updateCmdDamageDirectly(oppId, newValue){
-            if(!roomId || !userId) return;
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            const newDamage = Math.max(0, parseInt(newValue) || 0);
             try{
                 const snap = await getDoc(ref);
                 if(!snap.exists()) return;
                 const data = snap.data();
-                const currentPlayer = data.players[userId];
-                if(!currentPlayer) return;
-                const currentDamageMap = currentPlayer.commanderDamage || {};
-                currentDamageMap[oppId] = newDamage;
-                await setDoc(ref, {
-                    players: {
-                        [userId]: {
-                            ...currentPlayer,
-                            commanderDamage: currentDamageMap
-                        }
-                    },
-                    lastActive: serverTimestamp()
-                }, { merge: true });
-            }catch(e){ console.error("Error setting commander damage directly:", e); }
+                const players = data.players || {};
+                const target = players[targetPlayerId] || {};
+                const cur = target.life ?? getStartingLife();
+                const newLife = cur + delta;
+                target.life = newLife;
+                await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
+            }catch(e){ console.error("Error updating life for player:", e); }
+        }
+
+        async function updateInfect(targetPlayerId, delta){
+            if(!roomId) return;
+            const ref = doc(db, ROOM_COLLECTION, roomId);
+            try{
+                const snap = await getDoc(ref);
+                if(!snap.exists()) return;
+                const data = snap.data();
+                const players = data.players || {};
+                const target = players[targetPlayerId] || {};
+                const cur = target.infect || 0;
+                const newVal = Math.max(0, cur + delta);
+                target.infect = newVal;
+                await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
+            }catch(e){ console.error("Error updating infect:", e); }
+        }
+
+        async function updateCmdDamageForTarget(targetPlayerId, oppId, delta){
+            if(!roomId) return;
+            const ref = doc(db, ROOM_COLLECTION, roomId);
+            try{
+                const snap = await getDoc(ref);
+                if(!snap.exists()) return;
+                const data = snap.data();
+                const players = data.players || {};
+                const target = players[targetPlayerId] || {};
+                const dmgMap = target.commanderDamage || {};
+                const cur = dmgMap[oppId] || 0;
+                const newVal = Math.max(0, cur + delta);
+                dmgMap[oppId] = newVal;
+                target.commanderDamage = dmgMap;
+                await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
+            }catch(e){ console.error("Error updating commander damage for target:", e); }
+        }
+
+        async function updateCmdDamageForTargetDirectly(targetPlayerId, oppId, newValue){
+            if(!roomId) return;
+            const ref = doc(db, ROOM_COLLECTION, roomId);
+            try{
+                const snap = await getDoc(ref);
+                if(!snap.exists()) return;
+                const data = snap.data();
+                const players = data.players || {};
+                const target = players[targetPlayerId] || {};
+                const dmgMap = target.commanderDamage || {};
+                dmgMap[oppId] = Math.max(0, parseInt(newValue) || 0);
+                target.commanderDamage = dmgMap;
+                await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
+            }catch(e){ console.error("Error setting commander damage for target directly:", e); }
         }
 
         // ----------------------------------------------------------------------
-        // RESTART GAME: reset life and clear commanderDamage for all players
+        // RESTART GAME: reset life and clear commanderDamage and infect for all players
         // ----------------------------------------------------------------------
         async function restartGame(){
             if(!roomId) return;
@@ -879,11 +966,12 @@
                     updates[pid] = {
                         ...players[pid],
                         life: getStartingLife(),
-                        commanderDamage: {}
+                        commanderDamage: {},
+                        infect: 0
                     };
                 });
                 await setDoc(ref, { players: updates, lastActive: serverTimestamp() }, { merge: true });
-                alert("Game restarted: life reset and commander damage cleared.");
+                alert("Game restarted: life reset, commander damage and infect cleared.");
             }catch(e){ console.error("Failed to restart game:", e); alert("Failed to restart game. Check console."); }
         }
 
@@ -899,17 +987,27 @@
             const input = document.getElementById('edit-commander-name');
             const suggestions = document.getElementById('edit-commander-suggestions');
             let editAutocompleteTimeout = null;
-            input.addEventListener('input', ()=>{
+
+            function cleanup(){
+                input.removeEventListener('input', onInput);
+                document.getElementById('edit-commander-cancel').onclick = null;
+                document.getElementById('edit-commander-save').onclick = null;
+                suggestions.innerHTML = '';
+            }
+
+            function onInput(){
                 const q = input.value.trim();
                 if(editAutocompleteTimeout) clearTimeout(editAutocompleteTimeout);
                 if(q.length >= 2) editAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(q, 'edit-commander-suggestions', 'edit-commander-name'), AUTOCOMPLETE_DEBOUNCE_MS);
                 else suggestions.innerHTML = '';
-            });
+            }
+
+            input.addEventListener('input', onInput);
 
             document.getElementById('edit-commander-cancel').onclick = ()=>{
                 modal.style.display = 'none';
                 modal.setAttribute('aria-hidden','true');
-                suggestions.innerHTML = '';
+                cleanup();
             };
 
             document.getElementById('edit-commander-save').onclick = async ()=>{
@@ -919,7 +1017,6 @@
                 resultDiv.textContent = "Validating...";
                 const validation = await validateCommander(name);
                 if(!validation){ resultDiv.textContent = `Commander "${name}" not found on Scryfall.`; return; }
-                // update current player's commander info in Firestore
                 try{
                     const ref = doc(db, ROOM_COLLECTION, roomId);
                     const snap = await getDoc(ref);
@@ -931,7 +1028,7 @@
                     me.commanderImageUrl = validation.imageUrl;
                     await setDoc(ref, { players: { [userId]: me }, lastActive: serverTimestamp() }, { merge: true });
                     resultDiv.textContent = "Commander updated.";
-                    setTimeout(()=>{ modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); }, 700);
+                    setTimeout(()=>{ modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); cleanup(); }, 700);
                 }catch(e){ console.error("Failed to save commander edit:", e); resultDiv.textContent = "Failed to save. Check console."; }
             };
         }
@@ -1021,6 +1118,7 @@
                         [userId]: {
                             life: getStartingLife(),
                             commanderDamage: {},
+                            infect: 0,
                             name,
                             commanderName,
                             commanderImageUrl
@@ -1045,6 +1143,7 @@
                                     [userId]: {
                                         life: getStartingLife(),
                                         commanderDamage: {},
+                                        infect: 0,
                                         name: newName,
                                         commanderName: newCommanderName,
                                         commanderImageUrl: newCommanderImageUrl
@@ -1143,9 +1242,7 @@
             else{ signInAnonymously(auth).catch(e=>{ document.getElementById("status-message").textContent = "Auth Error: " + e.message; }); }
         });
 
-        // ----------------------------------------------------------------------
         // Expose restartGame for debugging if needed
-        // ----------------------------------------------------------------------
         window.restartGame = restartGame;
     </script>
 </body>
