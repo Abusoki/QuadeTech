@@ -10,17 +10,20 @@
       --accent:#2980b9;--accent-strong:#1f6fa8;--green:#27ae60;--red:#c0392b;
       --dark-border:#22272a;--input-bg:#1f2326;
     }
+    /* Prevent layout overflow and ensure predictable sizing */
+    *,*::before,*::after{ box-sizing:border-box }
     html,body{height:100%;margin:0}
     body{
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       background:var(--bg);color:var(--text);display:flex;flex-direction:column;
       align-items:center;padding:20px;box-sizing:border-box;min-height:100vh;
+      overflow-x:hidden; /* stop right-side clipping on mobile */
     }
     header.app-header{width:100%;max-width:1100px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px}
     .brand{display:flex;flex-direction:column;gap:2px}
     .app-title{margin:0;font-size:1.25rem;color:var(--text)}
     .app-subtitle{margin:0;font-size:0.8rem;color:var(--muted);font-style:italic}
-    nav.site-nav{display:flex;gap:8px}
+    nav.site-nav{display:flex;gap:8px;flex-wrap:wrap}
     nav.site-nav button{background:transparent;color:var(--text);border:1px solid transparent;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
     nav.site-nav button.active{background:rgba(41,128,185,0.10);border-color:var(--accent)}
     #app-container{width:100%;max-width:1100px;background:var(--card);padding:20px;border-radius:12px;box-shadow:0 6px 30px rgba(0,0,0,0.6);box-sizing:border-box;position:relative}
@@ -28,7 +31,10 @@
     textarea{min-height:120px;resize:vertical}
     input,button,textarea,select{-webkit-appearance:none;appearance:none;-webkit-tap-highlight-color:transparent}
     *:focus,*:focus-visible,*:focus-within{outline:none!important;box-shadow:none!important}
-    button{cursor:pointer;border-radius:8px;padding:10px 12px;border:none;font-weight:700;transition:transform .08s ease,opacity .12s}
+    button{
+      cursor:pointer;border-radius:8px;padding:10px 12px;border:none;font-weight:700;
+      transition:transform .03s ease,opacity .06s;
+    }
     button:active,.tapped{transform:scale(.96)}
     .btn-primary{background:linear-gradient(180deg,var(--green),#1f8a4a);color:#fff}
     .btn-danger{background:linear-gradient(180deg,var(--red),#9b2b24);color:#fff}
@@ -37,7 +43,8 @@
     .player-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:12px}
     @media(max-width:900px){.player-grid{grid-template-columns:1fr}}
     .player-panel{background:linear-gradient(180deg,rgba(255,255,255,0.01),rgba(255,255,255,0.00));border:1px solid var(--dark-border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
-    .player-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .player-eliminated{opacity:.5}
+    .player-header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
     .player-name{font-weight:800;font-size:1rem;color:var(--text)}
     .player-sub{font-size:.85rem;color:var(--muted)}
     .life-big{font-size:3.2rem;font-weight:900;color:var(--text);letter-spacing:-1px}
@@ -69,8 +76,8 @@
     #chat-card-preview{position:fixed;top:50%;right:20px;transform:translateY(-50%);width:300px;max-width:40vw;border:3px solid var(--accent);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,0.7);background:#0b0d0f;z-index:1500;display:none;padding:8px}
     #chat-card-preview img{display:block;width:100%;border-radius:6px}
     #chat-card-preview .card-title{margin-top:8px;font-weight:800;color:var(--text);text-align:center}
-    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);display:none;justify-content:center;align-items:center;z-index:2000}
-    .modal-content{background:#16181a;color:var(--text);padding:20px;border-radius:10px;width:92%;max-width:520px;box-shadow:0 12px 40px rgba(0,0,0,.7);position:relative}
+    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);display:none;justify-content:center;align-items:center;z-index:2000;padding:16px}
+    .modal-content{background:#16181a;color:var(--text);padding:20px;border-radius:10px;width:100%;max-width:520px;box-shadow:0 12px 40px rgba(0,0,0,.7);position:relative}
     .suggestions-list{position:absolute;width:100%;background:var(--input-bg);border:1px solid var(--dark-border);border-top:none;max-height:150px;overflow-y:auto;z-index:100;border-radius:0 0 8px 8px;box-shadow:0 6px 18px rgba(0,0,0,.6);margin-top:-10px}
     .suggestions-list:empty{display:none!important;border:none!important;box-shadow:none!important;margin-top:0!important}
     .suggestion-item{padding:8px 12px;cursor:pointer;color:var(--text)}
@@ -80,12 +87,27 @@
     #lobby-features{margin-top:18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
     #room-footer{margin-top:14px;color:var(--muted);font-size:.9rem;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
     .muted{color:var(--muted)}
-    .row{display:flex;gap:8px;align-items:center}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .col{display:flex;flex-direction:column;gap:8px}
     /* Chat full width container */
     #chat-container{width:100%;margin-top:18px}
-    #chat-controls{display:flex;gap:8px;align-items:center}
-    @media(max-width:720px){header.app-header{flex-direction:column;align-items:flex-start;gap:8px}#lobby-card-preview{display:none!important}#chat-card-preview{display:none!important}}
+    #chat-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    /* Mobile-specific layout fixes */
+    @media(max-width:720px){
+      header.app-header{flex-direction:column;align-items:flex-start;gap:8px}
+      #lobby-card-preview{display:none!important}
+      #chat-card-preview{display:none!important}
+      /* Stack the inner player panel columns vertically to avoid horizontal overflow */
+      .player-panel > div[style*="display:flex"][style*="justify-content:space-between"]{
+        flex-direction:column!important;align-items:stretch!important;gap:12px!important
+      }
+      /* Make the right-side controls full width on mobile */
+      .player-panel .controls{width:100%}
+      .player-panel div[style*="min-width:220px"]{min-width:0!important;width:100%!important}
+      /* Reduce container padding slightly */
+      #app-container{padding:14px}
+      body{padding:14px}
+    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
@@ -253,6 +275,18 @@
       return total;
     }
 
+    // compute max incoming from a single opponent to target (for 21+ elimination)
+    function computeMaxSingleIncomingCmdDamage(roomData, targetPlayerId){
+      let maxVal = 0;
+      const players = roomData.players || {};
+      Object.keys(players).forEach(pid=>{
+        const dmgMap = players[pid]?.commanderDamage || {};
+        const val = dmgMap[targetPlayerId] || 0;
+        if(val > maxVal) maxVal = val;
+      });
+      return maxVal;
+    }
+
     // ----------------------------------------------------------------------
     // ROUTING & PAGES
     // ----------------------------------------------------------------------
@@ -378,11 +412,11 @@
             listHtml += `
               <div class="room-item" style="display:flex;justify-content:space-between;align-items:center;background-color:#121416;padding:12px;margin-bottom:8px;border-radius:8px;border:1px solid var(--dark-border)">
                 <div class="room-info" style="flex:1">
-                  <div style="display:flex;align-items:center;gap:12px">
+                  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
                     <div style="font-weight:800;color:var(--text);min-width:160px">${rId}</div>
                     <div style="font-size:.9em;color:var(--muted)">${pCount} Player(s) • Owner: ${ownerName}</div>
                   </div>
-                  <div style="font-size:.85em;color:var(--muted);margin-top:6px;display:flex;gap:12px;align-items:center">
+                  <div style="font-size:.85em;color:var(--muted);margin-top:6px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
                     <div>Commander: <strong style="color:var(--text)">${ownerCmdName}</strong></div>
                     <div>Created: <strong style="color:var(--text)">${createdAtDate ? createdAtDate.toLocaleString() : 'N/A'}</strong></div>
                     <div>Expires: <strong style="color:var(--text)">${timeLeftText}</strong></div>
@@ -483,14 +517,14 @@
       const currentPlayerName = roomData.players[userId]?.name || 'You';
       statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
 
-      // header + controls (roll moved left of Card Search; roll result shown left of button)
+      // header + controls
       let html = `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
           <div>
             <h2 style="margin:0;color:var(--text)">Room: ${roomId}</h2>
             <div style="color:var(--muted);font-size:.9rem;margin-top:6px">Players: ${Object.keys(roomData.players).length}</div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <div id="roll-area" style="display:flex;align-items:center;gap:8px;margin-right:6px">
               <div id="roll-result-top" style="font-weight:900;color:var(--text);min-width:36px;text-align:center">-</div>
               <button id="roll-d20-btn-top" class="btn-secondary">Roll D20</button>
@@ -522,21 +556,23 @@
       html += `<div class="player-grid">`;
       playerIds.forEach(playerId=>{
         const player = roomData.players[playerId];
-        if(!player) return; // skip if player data missing
+        if(!player) return;
         const isMe = playerId === userId;
         const life = player.life ?? getStartingLife();
         const commanderName = player.commanderName || player.commander || 'N/A';
         const infectVal = player.infect || 0;
 
-        // per-opponent rows will be rendered only inside the toggled cmd-controls
+        // threshold: eliminated if life <= 0 or incoming from any single opponent >= 21
+        const maxSingleIncoming = computeMaxSingleIncomingCmdDamage(roomData, playerId);
+        const isEliminated = (life <= 0) || (maxSingleIncoming >= 21);
+
+        // per-opponent rows only inside cmd-controls
         let perOppRows = '';
         const opponents = playerIds.filter(id => id !== playerId);
         if(opponents.length > 0){
           opponents.forEach(oppId => {
-            // value is opponent's outgoing to this player
             const dmg = (roomData.players[oppId]?.commanderDamage || {})[playerId] || 0;
             const oppName = roomData.players[oppId]?.name || 'Player';
-            // only allow editing these incoming values if the target player is you (playerId === userId)
             const editable = (playerId === userId);
             const disabledAttr = editable ? '' : 'disabled';
             perOppRows += `
@@ -561,7 +597,6 @@
           </div>
         `;
 
-        // For the CMD block: show "to" and "from" but hide "from" on YOU panel (per request).
         const outgoingTotal = computeOutgoingTotal(roomData, playerId);
         const incomingTotal = computeIncomingCmdDamage(roomData, playerId);
         let outgoingBreakdownHtml = '';
@@ -578,10 +613,8 @@
           outgoingBreakdownHtml = outgoingHtml;
         }
 
-        // Build cmdBlockInner with conditional "from" visibility for YOU
         let cmdBlockInner = '';
         if (isMe) {
-          // YOU: show only "to" and outgoing breakdown
           cmdBlockInner = `
             <div style="display:flex;flex-direction:column;gap:6px">
               <div style="display:flex;gap:12px;align-items:center">
@@ -593,12 +626,10 @@
             </div>
           `;
         } else {
-          // Others: show both "from" then "to"
           cmdBlockInner = `
             <div style="display:flex;flex-direction:column;gap:6px">
               <div style="display:flex;gap:12px;align-items:center">
-                <div>
-                </div>
+                <div></div>
                 <div>
                   <div class="cmd-label">CMD DMG from</div>
                   <div class="cmd-value" id="cmd-to-${playerId}">${outgoingTotal}</div>
@@ -609,7 +640,7 @@
         }
 
         html += `
-          <div class="player-panel" data-player-id="${playerId}">
+          <div class="player-panel${isEliminated ? ' player-eliminated' : ''}" data-player-id="${playerId}">
             <div class="player-header">
               <div>
                 <div class="player-name">${isMe ? 'YOU' : (player.name || 'Player')}</div>
@@ -639,13 +670,13 @@
 
               <div style="min-width:220px;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
                 <div class="controls" style="flex-direction:column;width:100%">
-                  <div style="display:flex;gap:8px;width:100%">
+                  <div style="display:flex;gap:8px;width:100%;flex-wrap:wrap">
                     <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-5" ${isMe ? '' : 'disabled'}>-5</button>
                     <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-1" ${isMe ? '' : 'disabled'}>-1</button>
                     <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+1" ${isMe ? '' : 'disabled'}>+1</button>
                     <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+5" ${isMe ? '' : 'disabled'}>+5</button>
                   </div>
-                  <div style="display:flex;gap:8px;width:100%">
+                  <div style="display:flex;gap:8px;width:100%;flex-wrap:wrap">
                     <button class="control-btn" data-action="cmd-toggle" data-player="${playerId}">CMD DMG</button>
                     ${!isMe ? `<button class="control-btn preview" data-action="show-commander" data-player="${playerId}">Show CMD</button>` : ''}
                     ${isMe ? `<button class="control-btn" data-action="edit-commander" data-player="${playerId}">Edit Commander</button>` : ''}
@@ -665,12 +696,12 @@
           </div>
         `;
       });
-      html += `</div>`; // player-grid
+      html += `</div>`;
 
       // Chat full width below player grid
       html += `
         <div id="chat-container">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap">
             <div style="font-weight:700;color:var(--text)">Game Chat</div>
             <div style="color:var(--muted);font-size:.85rem">Room ID: ${roomId}</div>
           </div>
@@ -712,7 +743,24 @@
           const targetPlayer = btn.dataset.player;
           const delta = parseInt(btn.dataset.delta || '0');
 
-          if(action === 'life'){ await updateLifeForPlayer(targetPlayer, delta); }
+          if(action === 'life'){
+            // optimistic UI: update immediately for responsiveness
+            if (targetPlayer === userId) {
+              const lifeEl = document.getElementById(`life-display-${targetPlayer}`);
+              if (lifeEl) {
+                const current = parseInt(lifeEl.textContent || '0');
+                const next = current + delta;
+                lifeEl.textContent = next;
+                const panel = lifeEl.closest('.player-panel');
+                if (panel) {
+                  const eliminatedNow = (next <= 0);
+                  if (eliminatedNow) panel.classList.add('player-eliminated');
+                  else panel.classList.remove('player-eliminated');
+                }
+              }
+            }
+            updateLifeForPlayer(targetPlayer, delta);
+          }
           else if(action === 'cmd-toggle'){
             const controls = document.getElementById(`cmd-controls-${targetPlayer}`);
             if(!controls) return;
@@ -872,7 +920,6 @@
     // Update opponent's outgoing to target (oppId -> targetPlayerId). Only editable when target is you.
     async function updateCmdDamageForTarget(oppId, targetPlayerId, delta){
       if(!roomId || !userId) return;
-      // only allow editing incoming values for yourself (targetPlayerId must be you)
       if(targetPlayerId !== userId) return;
       const ref = doc(db, ROOM_COLLECTION, roomId);
       try{
@@ -1010,7 +1057,7 @@
           <div id="suggestions-list" class="suggestions-list"></div>
         </div>
         <input type="password" id="pwd-input" placeholder="Room Password">
-        <div style="display:flex;gap:8px;margin-top:8px">
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
           <button id="action-btn" class="btn-primary">${btnText}</button>
           <button id="cancel-btn" class="btn-danger">Cancel</button>
         </div>
