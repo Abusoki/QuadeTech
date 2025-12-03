@@ -5,21 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MTG Life Tracker</title>
     <style>
+        /* --- DARK MODE BASE STYLES --- */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             padding: 20px;
-            background-color: #f0f2f5;
-            color: #333;
+            background-color: #1e1e1e; /* Dark Background */
+            color: #f0f0f0; /* Light Text */
         }
         #app-container {
             width: 100%;
             max-width: 450px;
-            background-color: white;
+            background-color: #2c2c2c; /* Dark Card Background */
             padding: 25px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             border-radius: 12px;
         }
         
@@ -28,9 +29,11 @@
             width: 100%;
             padding: 12px;
             margin-bottom: 10px;
-            border: 1px solid #ccc;
+            border: 1px solid #444; /* Darker border */
             border-radius: 6px;
             box-sizing: border-box;
+            background-color: #383838; /* Dark input background */
+            color: #f0f0f0; /* Light input text */
         }
         button {
             cursor: pointer;
@@ -42,10 +45,12 @@
         button:active {
             transform: scale(0.96);
         }
+        
+        /* --- Button Colors (Accents remain, but backgrounds are dark) --- */
         .btn-primary {
             width: 100%;
             padding: 12px;
-            background-color: #2ecc71;
+            background-color: #27ae60; /* Darker Green */
             color: white;
             font-size: 1.1em;
             margin-top: 10px;
@@ -53,12 +58,12 @@
         .btn-danger {
             width: 100%;
             padding: 12px;
-            background-color: #e74c3c;
+            background-color: #c0392b; /* Darker Red */
             color: white;
             margin-top: 5px;
         }
         .btn-secondary {
-            background-color: #95a5a6;
+            background-color: #555; /* Dark Gray Secondary */
             color: white;
             padding: 8px;
             margin-left: 5px;
@@ -66,10 +71,11 @@
         
         /* --- Game View Styles --- */
         .player-counter {
-            border: 1px solid #ddd;
+            border: 1px solid #444;
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 20px;
+            background-color: #333; /* Player block background */
         }
         .life-section {
             display: flex;
@@ -78,25 +84,25 @@
             margin-bottom: 15px;
         }
         
-        /* NEW: Editable life input style */
+        /* Editable life input style */
         .life-input {
             font-size: 2.5em;
             font-weight: 800;
-            color: #2c3e50;
-            width: 100px; /* Wider input for life total */
+            color: #e0e0e0; /* Light Text */
+            width: 100px; 
             padding: 0;
             border: none;
             text-align: left;
             background: none;
             box-sizing: content-box;
-            height: 1.5em; /* Match line height */
+            height: 1.5em; 
             line-height: 1.5em;
         }
         
         .life-total { /* Kept for opponents */
             font-size: 2.5em;
             font-weight: 800;
-            color: #2c3e50;
+            color: #e0e0e0; 
         }
 
         .player-name-display {
@@ -106,22 +112,22 @@
         }
         .cmd-name {
             font-size: 0.9em;
-            color: #7f8c8d;
+            color: #aaa; /* Lighter gray for subtext */
         }
         .btn-life {
             padding: 8px 12px;
             font-size: 1em;
-            background-color: #3498db;
+            background-color: #2980b9; /* Darker Blue */
             color: white;
         }
         .btn-damage {
             padding: 4px 8px;
             font-size: 0.9em;
-            background-color: #e74c3c;
+            background-color: #c0392b; /* Darker Red */
             color: white;
         }
         .damage-section {
-            background-color: #f9f9f9;
+            background-color: #3a3a3a; /* Darker damage section background */
             padding: 10px;
             border-radius: 6px;
             margin-top: 10px;
@@ -132,7 +138,7 @@
             align-items: center;
             margin-bottom: 8px;
             padding-bottom: 8px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #444; /* Darker separator */
         }
         .control-group {
             display: flex;
@@ -148,17 +154,18 @@
             font-size: 1em;
             margin: 0;
             height: auto;
-            border: 1px solid #ccc;
-            background-color: white;
+            border: 1px solid #555;
+            background-color: #444; /* Darker damage input background */
+            color: #f0f0f0;
         }
         .damage-input.lethal {
-            color: red;
-            border-color: red;
+            color: #ff5555; /* Brighter red for lethal */
+            border-color: #ff5555;
         }
 
         /* --- Lobby Features --- */
         #lobby-features button {
-            background-color: #2980b9;
+            background-color: #2980b9; /* Darker Blue */
             color: white;
             width: 48%;
             padding: 10px;
@@ -170,38 +177,35 @@
             justify-content: space-between;
             gap: 5px;
             margin-top: 10px;
-            border-top: 1px solid #eee;
+            border-top: 1px solid #444;
             padding-top: 15px;
         }
         #roll-result {
             font-size: 1.5em;
             font-weight: bold;
-            color: #2c3e50;
+            color: #e0e0e0;
             margin-left: 10px;
         }
 
         /* --- Chat Styles --- */
         #chat-container {
             margin-top: 20px;
-            border-top: 1px solid #ddd;
+            border-top: 1px solid #444;
             padding-top: 15px;
         }
         #chat-log {
             height: 150px;
             overflow-y: auto;
-            border: 1px solid #ccc;
+            border: 1px solid #555;
             padding: 10px;
             margin-bottom: 10px;
             border-radius: 6px;
-            background-color: #fcfcfc;
+            background-color: #333; /* Chat log background */
             font-size: 0.9em;
-        }
-        .chat-message {
-            margin-bottom: 5px;
-            word-wrap: break-word;
         }
         .chat-sender {
             font-weight: bold;
+            color: #74b9ff; /* Brighter blue for sender name */
             margin-right: 5px;
         }
         #chat-input-form {
@@ -216,41 +220,20 @@
         #chat-input-form button {
             width: auto;
             padding: 8px 15px;
-            background-color: #3498db;
+            background-color: #2980b9; /* Darker Blue */
             color: white;
         }
         
         /* --- Modal for Card Search --- */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
         .modal-content {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 400px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }
-        #search-results img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 4px;
-            margin-top: 15px;
+            background-color: #333; /* Modal background */
+            color: #f0f0f0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.7);
         }
         
         /* Global delete button style */
         #delete-all-rooms-btn {
-            background-color: #c0392b; 
+            background-color: #a62a1c; /* Slightly less harsh red */
             color: white;
             padding: 10px 15px;
             margin-top: 20px;
@@ -260,15 +243,19 @@
         
         /* Title Styles */
         .app-title {
-            color: #2c3e50;
+            color: #f0f0f0;
             margin-bottom: 5px;
             font-size: 2em;
         }
         .app-subtitle {
-            color: #7f8c8d;
+            color: #aaa;
             font-size: 0.9em;
             margin-bottom: 20px;
             font-style: italic;
+        }
+        
+        #status-message {
+            color: #aaa;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -369,7 +356,7 @@
                 senderSpan.textContent = `${msg.senderName}:`;
                 
                 if (msg.senderName === playerName) {
-                    senderSpan.style.color = '#3498db'; 
+                    senderSpan.style.color = '#74b9ff'; 
                 }
 
                 messageDiv.appendChild(senderSpan);
@@ -389,7 +376,7 @@
             
             let html = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                    <h2 style="margin:0;">Room: ${roomId}</h2>
+                    <h2 style="margin:0; color:#f0f0f0;">Room: ${roomId}</h2>
                     <div style="display:flex; gap:10px;">
                         <button id="delete-room-btn" class="btn-danger" style="width:auto; padding: 5px 10px;">Delete Room</button>
                         <button id="refresh-btn" class="btn-secondary" style="width:auto; padding: 5px 10px;">↻</button>
@@ -400,7 +387,7 @@
             const playerIds = Object.keys(roomData.players);
             playerIds.sort((a, b) => (a === userId ? -1 : b === userId ? 1 : 0));
 
-            html += `<h3 style="margin-top:0;">Players</h3>`;
+            html += `<h3 style="margin-top:0; color:#f0f0f0;">Players</h3>`;
 
             playerIds.forEach(playerId => {
                 const player = roomData.players[playerId];
@@ -436,7 +423,7 @@
                 const opponents = playerIds.filter(id => id !== playerId);
                 
                 if (opponents.length > 0) {
-                    damageRows = `<div class="damage-section"><h4 style="margin:0 0 10px 0; font-size:0.9em; color:#555;">Commander Damage Taken</h4>`;
+                    damageRows = `<div class="damage-section"><h4 style="margin:0 0 10px 0; font-size:0.9em; color:#aaa;">Commander Damage Taken</h4>`;
                     opponents.forEach(oppId => {
                         const opp = roomData.players[oppId];
                         const dmg = player.commanderDamage?.[oppId] || 0;
@@ -474,7 +461,7 @@
                 }
 
                 html += `
-                    <div class="player-counter" style="${isMe ? 'border: 2px solid #3498db;' : ''}">
+                    <div class="player-counter" style="${isMe ? 'border: 2px solid #2980b9;' : ''}">
                         <div class="life-section">
                             <div class="life-display">
                                 <div class="player-name-display">${isMe ? 'YOU' : player.name}</div>
@@ -491,7 +478,7 @@
             // --- Chat Container ---
             html += `
                 <div id="chat-container">
-                    <h3 style="margin-bottom: 10px;">Game Chat</h3>
+                    <h3 style="margin-bottom: 10px; color:#f0f0f0;">Game Chat</h3>
                     <div id="chat-log"></div>
                     <form id="chat-input-form">
                         <input type="text" id="chat-message-input" placeholder="Type message..." maxlength="150" required>
@@ -503,7 +490,7 @@
             // --- Lobby Features ---
             html += `
                 <div id="lobby-features">
-                    <h3 style="width:100%; margin-bottom: 5px;">Game Tools</h3>
+                    <h3 style="width:100%; margin-bottom: 5px; color:#f0f0f0;">Game Tools</h3>
                     <button id="roll-dice-btn">Roll D20</button>
                     <div id="roll-result" style="width:40%; text-align:center;">-</div>
                     <button id="turn-order-btn">Determine Turn Order</button>
@@ -590,7 +577,7 @@
             
             // Make updateCmdDamageDirectly and updateLifeDirectly globally accessible
             window.updateCmdDamageDirectly = updateCmdDamageDirectly; 
-            window.updateLifeDirectly = updateLifeDirectly; // New global function
+            window.updateLifeDirectly = updateLifeDirectly; 
         }
         
         // --- CHAT DATA UPDATE FUNCTION ---
@@ -620,7 +607,7 @@
 
         // --- DATA UPDATES ---
         
-        // NEW: Function to handle direct life total input changes
+        // Function to handle direct life total input changes
         async function updateLifeDirectly(newValue) {
             if (!roomId || !userId) return;
             const ref = doc(db, ROOM_COLLECTION, roomId);
@@ -781,13 +768,13 @@
             const btnText = mode === 'join' ? "Enter Game" : "Create Room";
             
             appContainer.innerHTML = `
-                <h2>${title}</h2>
+                <h2 style="color:#f0f0f0;">${title}</h2>
                 <input type="text" id="player-name-input" placeholder="Your Player Name">
                 <input type="text" id="commander-input" placeholder="Your Commander's Name (e.g., Urza)">
                 <input type="password" id="pwd-input" placeholder="Room Password">
                 <button id="action-btn" class="btn-primary">${btnText}</button>
                 <button id="cancel-btn" class="btn-danger">Cancel</button> 
-                <p id="err-msg" style="color:red"></p>
+                <p id="err-msg" style="color:#ff5555;"></p>
             `;
             
             document.getElementById("cancel-btn").onclick = () => {
@@ -883,9 +870,9 @@
             roomId = null;
 
             statusMessage.textContent = "Browse rooms or create a new one.";
-            statusMessage.style.color = "#555"; 
+            statusMessage.style.color = "#aaa"; 
 
-            let listHtml = '<p>Loading active rooms...</p>';
+            let listHtml = '<p style="color:#f0f0f0;">Loading active rooms...</p>';
             appContainer.innerHTML = `
                 <h1 class="app-title">Cardboard Bonfire 🔥</h1> 
                 <p class="app-subtitle">Life tracker for keeping life and bringing people together.</p> 
@@ -894,7 +881,7 @@
                     <input type="text" id="search-input" placeholder="Enter Room ID to Create/Search">
                     <button id="search-btn" class="btn-primary">Find or Create Room</button>
                 </div>
-                <h3>Active Rooms</h3>
+                <h3 style="color:#f0f0f0;">Active Rooms</h3>
                 <div id="room-list-container">${listHtml}</div>
                 <button id="delete-all-rooms-btn">Delete All Rooms (Admin)</button> 
             `;
@@ -904,7 +891,7 @@
                 const snap = await getDocs(q);
                 
                 if (snap.empty) {
-                    listHtml = '<p>No active rooms. Create one above!</p>';
+                    listHtml = '<p style="color:#f0f0f0;">No active rooms. Create one above!</p>';
                 } else {
                     listHtml = '';
                     snap.forEach(docSnap => {
@@ -915,19 +902,19 @@
                         const ownerCmd = rData.players[rData.ownerId]?.commander || 'N/A';
                         
                         listHtml += `
-                            <div class="room-item">
+                            <div class="room-item" style="display:flex; justify-content:space-between; align-items:center; background-color:#383838; padding: 10px; margin-bottom: 8px; border-radius: 4px;">
                                 <div class="room-info">
-                                    <span class="room-id">${rId}</span>
-                                    <span class="room-meta">${pCount} Player(s) | Owner: ${ownerName} [${ownerCmd}]</span>
+                                    <span class="room-id" style="font-weight:bold; color:#f0f0f0;">${rId}</span>
+                                    <span class="room-meta" style="font-size:0.9em; color:#aaa; display:block;">${pCount} Player(s) | Owner: ${ownerName} [${ownerCmd}]</span>
                                 </div>
-                                <button class="join-btn btn-secondary" data-rid="${rId}">Join</button>
+                                <button class="join-btn btn-secondary" data-rid="${rId}" style="width:auto;">Join</button>
                             </div>
                         `;
                     });
                 }
             } catch (e) {
                 console.error("List error:", e);
-                listHtml = `<p style="color:red">Error loading rooms. Permissions might be initializing...</p>`;
+                listHtml = `<p style="color:#ff5555;">Error loading rooms. Permissions might be initializing...</p>`;
             }
 
             const listContainer = document.getElementById("room-list-container");
@@ -965,10 +952,10 @@
         document.getElementById('modal-search-btn').addEventListener('click', async () => {
             const cardName = document.getElementById('modal-card-name').value.trim();
             const resultsDiv = document.getElementById('search-results');
-            resultsDiv.innerHTML = '<p>Searching...</p>';
+            resultsDiv.innerHTML = '<p style="color:#f0f0f0;">Searching...</p>';
 
             if (!cardName) {
-                resultsDiv.innerHTML = '<p>Please enter a card name.</p>';
+                resultsDiv.innerHTML = '<p style="color:#f0f0f0;">Please enter a card name.</p>';
                 return;
             }
 
@@ -980,17 +967,17 @@
                     const imgUrl = data.image_uris?.normal || data.card_faces?.[0]?.image_uris?.normal;
                     if (imgUrl) {
                         resultsDiv.innerHTML = `
-                            <h4>${data.name}</h4>
+                            <h4 style="color:#f0f0f0;">${data.name}</h4>
                             <img src="${imgUrl}" alt="${data.name}">
                         `;
                     } else {
-                        resultsDiv.innerHTML = '<p>Card found, but image unavailable.</p>';
+                        resultsDiv.innerHTML = '<p style="color:#f0f0f0;">Card found, but image unavailable.</p>';
                     }
                 } else {
-                    resultsDiv.innerHTML = `<p>Card not found. Check spelling.</p>`;
+                    resultsDiv.innerHTML = `<p style="color:#f0f0f0;">Card not found. Check spelling.</p>`;
                 }
             } catch (e) {
-                resultsDiv.innerHTML = `<p>Error connecting to Scryfall.</p>`;
+                resultsDiv.innerHTML = `<p style="color:#f0f0f0;">Error connecting to Scryfall.</p>`;
                 console.error(e);
             }
         });
