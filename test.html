@@ -285,6 +285,50 @@
         function hashPassword(password){ return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex); }
         function getStartingLife(){ return 40; }
 
+        /**
+         * Check room lastActive and delete if expired.
+         * Returns true if the room was deleted, false otherwise.
+         */
+        async function checkAndDeleteIfExpired(roomIdToCheck, roomData) {
+            try {
+                if (!roomData) return false;
+                // lastActive may be a Firestore Timestamp or a JS Date depending on source
+                const lastActiveField = roomData.lastActive;
+                let lastActiveDate = null;
+
+                if (!lastActiveField) {
+                    return false;
+                }
+
+                // Firestore Timestamp has toDate()
+                if (typeof lastActiveField.toDate === 'function') {
+                    lastActiveDate = lastActiveField.toDate();
+                } else if (lastActiveField instanceof Date) {
+                    lastActiveDate = lastActiveField;
+                } else if (typeof lastActiveField === 'number') {
+                    lastActiveDate = new Date(lastActiveField);
+                } else {
+                    // Unknown format
+                    return false;
+                }
+
+                const elapsedMinutes = (Date.now() - lastActiveDate.getTime()) / (1000 * 60);
+                if (elapsedMinutes > TIMEOUT_MINUTES) {
+                    // Delete the room document
+                    try {
+                        await deleteDoc(doc(db, ROOM_COLLECTION, roomIdToCheck));
+                    } catch (e) {
+                        console.error("Failed to delete expired room:", e);
+                    }
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.error("checkAndDeleteIfExpired error:", e);
+                return false;
+            }
+        }
+
         async function validateCommander(name){
             if(!name) return null;
             try{
@@ -765,12 +809,6 @@
                     } else if(action === 'edit-commander'){
                         const currentName = roomData.players[targetPlayer]?.commanderName || roomData.players[targetPlayer]?.commander || '';
                         openEditCommanderModal(currentName);
-                    } else if(action === 'cmd-set'){
-                        // not used in this layout
-                    } else if(action === 'cmd-add'){
-                        // not used in this layout
-                    } else if(action === 'cmd-sub'){
-                        // not used in this layout
                     } else if(action === 'cmd-target-add'){
                         const t = btn.dataset.target;
                         const opp = btn.dataset.opp;
@@ -799,7 +837,6 @@
                 });
             });
 
-            // attach infect display updates (inputs not used here)
             // chat submit
             const chatForm = document.getElementById('chat-input-form');
             if(chatForm){
