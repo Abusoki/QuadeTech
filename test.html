@@ -131,6 +131,10 @@
         .per-opp-left{font-size:0.9em;color:var(--muted);font-weight:700}
         .per-opp-controls{display:flex;align-items:center;gap:8px}
 
+        /* --- Outgoing CMD summary (for your panel) --- */
+        .outgoing-cmd-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+        .outgoing-cmd-item{font-size:0.95rem;color:var(--text);display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02)}
+
         /* --- Infect small tracker --- */
         .infect-block{margin-top:8px;display:flex;align-items:center;gap:8px}
         .infect-label{font-size:0.85rem;color:var(--muted)}
@@ -278,7 +282,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import {
             getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp,
-            arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc, arrayRemove
+            arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc, arrayRemove, arrayUnion as _arrayUnion
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ----------------------------------------------------------------------
@@ -364,6 +368,34 @@
                     });
                 }
             }catch(e){ console.error("Autocomplete error:", e); }
+        }
+
+        // ----------------------------------------------------------------------
+        // New helper: compute outgoing commander damage map for a source player
+        // Returns array of { oppId, oppName, dmg } in the same order as playersOrder
+        function computeOutgoingCmdDamage(roomData, sourcePlayerId){
+            const players = roomData.players || {};
+            const order = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? roomData.playersOrder : Object.keys(players || {});
+            const result = [];
+            order.forEach(pid => {
+                if(pid === sourcePlayerId) return; // skip self
+                const dmg = (players[sourcePlayerId]?.commanderDamage || {})[pid] || 0;
+                const name = players[pid]?.name || 'Player';
+                result.push({ oppId: pid, oppName: name, dmg });
+            });
+            return result;
+        }
+
+        // Existing helper: compute incoming commander damage total for a target player
+        function computeIncomingCmdDamage(roomData, targetPlayerId){
+            let total = 0;
+            const players = roomData.players || {};
+            Object.keys(players).forEach(pid=>{
+                const dmgMap = players[pid]?.commanderDamage || {};
+                const val = dmgMap[targetPlayerId] || 0;
+                total += val;
+            });
+            return total;
         }
 
         // ----------------------------------------------------------------------
@@ -532,17 +564,6 @@
         // ----------------------------------------------------------------------
         // ROOM VIEW (stylized) + features
         // ----------------------------------------------------------------------
-        function computeIncomingCmdDamage(roomData, targetPlayerId){
-            let total = 0;
-            const players = roomData.players || {};
-            Object.keys(players).forEach(pid=>{
-                const dmgMap = players[pid]?.commanderDamage || {};
-                const val = dmgMap[targetPlayerId] || 0;
-                total += val;
-            });
-            return total;
-        }
-
         function renderChat(chatLog, playerName){
             const chatLogDiv = document.getElementById('chat-log');
             if(!chatLogDiv) return;
@@ -694,6 +715,36 @@
                     </div>
                 `;
 
+                // For the CMD block: if this is your panel, show outgoing per-player breakdown (what your commander has done to others).
+                // For other players, keep showing incoming total (what others have done to them).
+                let cmdBlockInner = '';
+                if(isMe){
+                    const outgoing = computeOutgoingCmdDamage(roomData, playerId);
+                    let outgoingHtml = '<div class="outgoing-cmd-list">';
+                    if(outgoing.length === 0) outgoingHtml += `<div class="outgoing-cmd-item" style="justify-content:center;color:var(--muted)">No opponents yet</div>`;
+                    else {
+                        outgoing.forEach(item=>{
+                            outgoingHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">CMD DMG ${item.oppName}</div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
+                        });
+                    }
+                    outgoingHtml += '</div>';
+                    cmdBlockInner = `
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                            <div class="cmd-label" style="font-weight:700;color:var(--muted)">CMD DMG (your commander → others)</div>
+                            ${outgoingHtml}
+                        </div>
+                    `;
+                } else {
+                    // incoming total for others
+                    const incomingTotal = computeIncomingCmdDamage(roomData, playerId);
+                    cmdBlockInner = `
+                        <div>
+                            <div class="cmd-label">CMD DMG</div>
+                            <div class="cmd-value" id="cmd-total-${playerId}">${incomingTotal}</div>
+                        </div>
+                    `;
+                }
+
                 html += `
                     <div class="player-panel" data-player-id="${playerId}">
                         <div class="player-header">
@@ -713,14 +764,7 @@
 
                                 <div style="margin-top:8px">
                                     <div class="cmd-block">
-                                        <div>
-                                            <div class="cmd-label">CMD DMG</div>
-                                            <div class="cmd-value" id="cmd-total-${playerId}">${computeIncomingCmdDamage(roomData, playerId)}</div>
-                                        </div>
-                                        <div style="text-align:right">
-                                            <div class="player-sub">Commander</div>
-                                            <div style="font-weight:700;color:var(--muted);font-size:.85rem">${commanderName}</div>
-                                        </div>
+                                        ${cmdBlockInner}
                                     </div>
 
                                     <div class="infect-block" style="margin-top:8px">
