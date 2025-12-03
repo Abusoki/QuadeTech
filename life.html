@@ -116,7 +116,44 @@
         .cmd-name {
             font-size: 0.9em;
             color: #aaa; /* Lighter gray for subtext */
+            position: relative; /* Needed for tooltip positioning */
+            display: inline-block;
+            cursor: help;
         }
+        
+        /* --- NEW: Tooltip/Card Hover Styles --- */
+        .card-tooltip {
+            visibility: hidden;
+            width: 250px;
+            background-color: #1e1e1e;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%; /* Position the tooltip above the text */
+            left: 50%;
+            margin-left: -125px; /* Center the tooltip */
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none; /* Allows clicks to pass through */
+            border: 2px solid #2980b9;
+        }
+
+        .card-tooltip img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+        
+        .cmd-name:hover .card-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        /* -------------------------------------- */
+
+
         .btn-life {
             padding: 8px 12px;
             font-size: 1em;
@@ -360,6 +397,34 @@
         function getStartingLife() {
             return 40; 
         }
+        
+        /**
+         * Validates a card name against Scryfall and returns the official name and image URL.
+         * @param {string} name - The commander name entered by the user.
+         * @returns {object|null} - { validatedName, imageUrl } or null if not found.
+         */
+        async function validateCommander(name) {
+            if (!name) return null;
+            try {
+                const response = await fetch(`${SCRYFALL_API}${encodeURIComponent(name)}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const imageUrl = data.image_uris?.normal || data.card_faces?.[0]?.image_uris?.normal;
+                    
+                    if (imageUrl) {
+                        return {
+                            validatedName: data.name,
+                            imageUrl: imageUrl
+                        };
+                    }
+                }
+                return null;
+            } catch (e) {
+                console.error("Scryfall validation error:", e);
+                return null;
+            }
+        }
 
         // ----------------------------------------------------------------------
         // 5. GAME LOGIC & RENDERING
@@ -397,7 +462,6 @@
             const appContainer = document.getElementById("app-container");
             const statusMessage = document.getElementById("status-message");
 
-            // Ensure modal is hidden when entering room view
             document.getElementById('card-search-modal').style.display = 'none';
 
             const currentPlayerName = roomData.players[userId]?.name || 'You';
@@ -447,6 +511,18 @@
                     // Opponent: Static Life Total
                     lifeDisplayHtml = `<span class="life-total">${player.life}</span>`;
                 }
+                
+                // NEW: Commander Name with Hover
+                const commanderName = player.commanderName || player.commander || 'N/A';
+                const commanderHtml = player.commanderImageUrl ? `
+                    <div class="cmd-name">
+                        [${commanderName}]
+                        <span class="card-tooltip">
+                            <img src="${player.commanderImageUrl}" alt="${commanderName}">
+                        </span>
+                    </div>
+                ` : `<div class="cmd-name">[${commanderName}]</div>`;
+
 
                 let damageRows = '';
                 const opponents = playerIds.filter(id => id !== playerId);
@@ -468,9 +544,12 @@
                             `;
                         }
                         
+                        // Use the verified commander name for display
+                        const oppCmdName = opp.commanderName || opp.commander || 'N/A';
+
                         damageRows += `
                             <div class="damage-row">
-                                <span style="font-size:0.9em;">From **${opp.name}** [${opp.commander || 'N/A'}]</span>
+                                <span style="font-size:0.9em;">From **${opp.name}** [${oppCmdName}]</span>
                                 <div style="display:flex; align-items:center; gap:10px;">
                                     <input 
                                         type="number" 
@@ -494,7 +573,7 @@
                         <div class="life-section">
                             <div class="life-display">
                                 <div class="player-name-display">${isMe ? 'YOU' : player.name}</div>
-                                <div class="cmd-name">[${player.commander || 'N/A'}]</div>
+                                ${commanderHtml}
                                 ${lifeDisplayHtml}
                             </div>
                             ${lifeControls}
@@ -808,13 +887,12 @@
             const title = mode === 'join' ? `Join Room: ${rid}` : `Create Room: ${rid}`;
             const btnText = mode === 'join' ? "Enter Game" : "Create Room";
             
-            // FIX: Hide modal when moving to password prompt
             document.getElementById('card-search-modal').style.display = 'none';
 
             appContainer.innerHTML = `
                 <h2 style="color:#f0f0f0;">${title}</h2>
                 <input type="text" id="player-name-input" placeholder="Your Player Name">
-                <input type="text" id="commander-input" placeholder="Your Commander's Name (e.g., Urza)">
+                <input type="text" id="commander-input" placeholder="Your Commander's Name (Required)">
                 <input type="password" id="pwd-input" placeholder="Room Password">
                 <button id="action-btn" class="btn-primary">${btnText}</button>
                 <button id="cancel-btn" class="btn-danger">Cancel</button> 
@@ -830,37 +908,61 @@
                 const name = document.getElementById("player-name-input").value.trim();
                 const commander = document.getElementById("commander-input").value.trim();
                 const pwd = document.getElementById("pwd-input").value;
-                if(!name || !pwd) return;
+                const errMsg = document.getElementById("err-msg");
+                
+                if(!name || !pwd || !commander) {
+                    errMsg.textContent = "Player Name, Commander, and Password are required.";
+                    return;
+                }
+                
+                errMsg.textContent = "Verifying commander and joining...";
+                document.getElementById("action-btn").disabled = true;
+
+                const validationResult = await validateCommander(commander);
+
+                if (!validationResult) {
+                    errMsg.textContent = `Commander "${commander}" not found on Scryfall. Please check spelling or use the Card Search tool.`;
+                    document.getElementById("action-btn").disabled = false;
+                    return;
+                }
+                
+                const { validatedName, imageUrl } = validationResult;
                 
                 if (mode === 'join') {
                     const ref = doc(db, ROOM_COLLECTION, rid);
                     const snap = await getDoc(ref);
+                    
                     if(snap.exists()) {
                         const data = snap.data();
                         if(await checkAndDeleteIfExpired(rid, data)) {
-                            document.getElementById("err-msg").textContent = "Room expired and was deleted.";
+                            errMsg.textContent = "Room expired and was deleted.";
                             setTimeout(renderSetupView, 2000);
                             return;
                         }
                         if(data.passwordHash === hashPassword(pwd)) {
-                            listenToRoom(rid, name, commander); 
+                            // Pass validated commander data to listenToRoom
+                            listenToRoom(rid, name, validatedName, imageUrl); 
                         } else {
-                            document.getElementById("err-msg").textContent = "Wrong password.";
+                            errMsg.textContent = "Wrong password.";
+                            document.getElementById("action-btn").disabled = false;
                         }
                     } else {
-                        document.getElementById("err-msg").textContent = "Room no longer exists.";
+                        errMsg.textContent = "Room no longer exists.";
+                        document.getElementById("action-btn").disabled = false;
                     }
                 } else {
                     if(pwd.length < 3) {
-                        document.getElementById("err-msg").textContent = "Password too short.";
+                        errMsg.textContent = "Password too short.";
+                        document.getElementById("action-btn").disabled = false;
                         return;
                     }
-                    createRoom(rid, pwd, name, commander); 
+                    // Pass validated commander data to createRoom
+                    createRoom(rid, pwd, name, validatedName, imageUrl); 
                 }
             };
         }
 
-        async function createRoom(rid, pwd, name, commander) {
+        async function createRoom(rid, pwd, name, commanderName, commanderImageUrl) {
             if(!userId) return;
             const ref = doc(db, ROOM_COLLECTION, rid);
             try {
@@ -871,7 +973,13 @@
                     lastActive: serverTimestamp(),
                     chatLog: [], 
                     players: {
-                        [userId]: { life: getStartingLife(), commanderDamage: {}, name: name, commander: commander }
+                        [userId]: { 
+                            life: getStartingLife(), 
+                            commanderDamage: {}, 
+                            name: name, 
+                            commanderName: commanderName,
+                            commanderImageUrl: commanderImageUrl
+                        }
                     }
                 });
                 listenToRoom(rid);
@@ -880,7 +988,7 @@
             }
         }
         
-        function listenToRoom(rid, newName = null, newCommander = null) {
+        function listenToRoom(rid, newName = null, newCommanderName = null, newCommanderImageUrl = null) {
             if(unsubscribe) unsubscribe();
             const ref = doc(db, ROOM_COLLECTION, rid);
             
@@ -890,12 +998,22 @@
                     const data = snap.data();
                     
                     if(!data.players[userId]) {
-                        if (newName && newCommander) {
+                        if (newName && newCommanderName && newCommanderImageUrl) {
+                            // Joining existing room with new, validated data
                             setDoc(ref, {
-                                players: { [userId]: { life: getStartingLife(), commanderDamage: {}, name: newName, commander: newCommander } },
+                                players: { 
+                                    [userId]: { 
+                                        life: getStartingLife(), 
+                                        commanderDamage: {}, 
+                                        name: newName, 
+                                        commanderName: newCommanderName,
+                                        commanderImageUrl: newCommanderImageUrl
+                                    } 
+                                },
                                 lastActive: serverTimestamp()
                             }, { merge: true });
                         } else {
+                            // Should not happen if promptPassword worked, but handles safety
                             renderSetupView();
                             return;
                         }
@@ -913,7 +1031,6 @@
             const statusMessage = document.getElementById("status-message");
             roomId = null;
 
-            // FIX: Hide modal when returning to setup view
             document.getElementById('card-search-modal').style.display = 'none';
 
             statusMessage.textContent = "Browse rooms or create a new one.";
@@ -945,14 +1062,16 @@
                         const rData = docSnap.data();
                         const rId = docSnap.id;
                         const pCount = Object.keys(rData.players || {}).length;
+                        
+                        // Attempt to grab owner's validated commander name
+                        const ownerCmdName = rData.players[rData.ownerId]?.commanderName || rData.players[rData.ownerId]?.commander || 'N/A';
                         const ownerName = rData.players[rData.ownerId]?.name || 'Owner';
-                        const ownerCmd = rData.players[rData.ownerId]?.commander || 'N/A';
                         
                         listHtml += `
                             <div class="room-item" style="display:flex; justify-content:space-between; align-items:center; background-color:#383838; padding: 10px; margin-bottom: 8px; border-radius: 4px;">
                                 <div class="room-info">
                                     <span class="room-id" style="font-weight:bold; color:#f0f0f0;">${rId}</span>
-                                    <span class="room-meta" style="font-size:0.9em; color:#aaa; display:block;">${pCount} Player(s) | Owner: ${ownerName} [${ownerCmd}]</span>
+                                    <span class="room-meta" style="font-size:0.9em; color:#aaa; display:block;">${pCount} Player(s) | Owner: ${ownerName} [${ownerCmdName}]</span>
                                 </div>
                                 <button class="join-btn btn-secondary" data-rid="${rId}" style="width:auto;">Join</button>
                             </div>
