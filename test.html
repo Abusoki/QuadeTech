@@ -28,7 +28,10 @@
     textarea{min-height:120px;resize:vertical}
     input,button,textarea,select{-webkit-appearance:none;appearance:none;-webkit-tap-highlight-color:transparent}
     *:focus,*:focus-visible,*:focus-within{outline:none!important;box-shadow:none!important}
-    button{cursor:pointer;border-radius:8px;padding:10px 12px;border:none;font-weight:700;transition:transform .08s ease,opacity .12s}
+    button{
+      cursor:pointer;border-radius:8px;padding:10px 12px;border:none;font-weight:700;
+      transition:transform .03s ease,opacity .06s;
+    }
     button:active,.tapped{transform:scale(.96)}
     .btn-primary{background:linear-gradient(180deg,var(--green),#1f8a4a);color:#fff}
     .btn-danger{background:linear-gradient(180deg,var(--red),#9b2b24);color:#fff}
@@ -37,6 +40,7 @@
     .player-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:12px}
     @media(max-width:900px){.player-grid{grid-template-columns:1fr}}
     .player-panel{background:linear-gradient(180deg,rgba(255,255,255,0.01),rgba(255,255,255,0.00));border:1px solid var(--dark-border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+    .player-eliminated{opacity:.5}
     .player-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
     .player-name{font-weight:800;font-size:1rem;color:var(--text)}
     .player-sub{font-size:.85rem;color:var(--muted)}
@@ -251,6 +255,18 @@
         total += val;
       });
       return total;
+    }
+
+    // compute max incoming from a single opponent to target (for 21+ elimination)
+    function computeMaxSingleIncomingCmdDamage(roomData, targetPlayerId){
+      let maxVal = 0;
+      const players = roomData.players || {};
+      Object.keys(players).forEach(pid=>{
+        const dmgMap = players[pid]?.commanderDamage || {};
+        const val = dmgMap[targetPlayerId] || 0;
+        if(val > maxVal) maxVal = val;
+      });
+      return maxVal;
     }
 
     // ----------------------------------------------------------------------
@@ -483,7 +499,7 @@
       const currentPlayerName = roomData.players[userId]?.name || 'You';
       statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
 
-      // header + controls (roll moved left of Card Search; roll result shown left of button)
+      // header + controls
       let html = `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
           <div>
@@ -522,21 +538,23 @@
       html += `<div class="player-grid">`;
       playerIds.forEach(playerId=>{
         const player = roomData.players[playerId];
-        if(!player) return; // skip if player data missing
+        if(!player) return;
         const isMe = playerId === userId;
         const life = player.life ?? getStartingLife();
         const commanderName = player.commanderName || player.commander || 'N/A';
         const infectVal = player.infect || 0;
 
-        // per-opponent rows will be rendered only inside the toggled cmd-controls
+        // threshold: eliminated if life <= 0 or incoming from any single opponent >= 21
+        const maxSingleIncoming = computeMaxSingleIncomingCmdDamage(roomData, playerId);
+        const isEliminated = (life <= 0) || (maxSingleIncoming >= 21);
+
+        // per-opponent rows only inside cmd-controls
         let perOppRows = '';
         const opponents = playerIds.filter(id => id !== playerId);
         if(opponents.length > 0){
           opponents.forEach(oppId => {
-            // value is opponent's outgoing to this player
             const dmg = (roomData.players[oppId]?.commanderDamage || {})[playerId] || 0;
             const oppName = roomData.players[oppId]?.name || 'Player';
-            // only allow editing these incoming values if the target player is you (playerId === userId)
             const editable = (playerId === userId);
             const disabledAttr = editable ? '' : 'disabled';
             perOppRows += `
@@ -561,7 +579,6 @@
           </div>
         `;
 
-        // For the CMD block: show "to" and "from" but hide "from" on YOU panel (per request).
         const outgoingTotal = computeOutgoingTotal(roomData, playerId);
         const incomingTotal = computeIncomingCmdDamage(roomData, playerId);
         let outgoingBreakdownHtml = '';
@@ -578,10 +595,8 @@
           outgoingBreakdownHtml = outgoingHtml;
         }
 
-        // Build cmdBlockInner with conditional "from" visibility for YOU
         let cmdBlockInner = '';
         if (isMe) {
-          // YOU: show only "to" and outgoing breakdown
           cmdBlockInner = `
             <div style="display:flex;flex-direction:column;gap:6px">
               <div style="display:flex;gap:12px;align-items:center">
@@ -593,12 +608,10 @@
             </div>
           `;
         } else {
-          // Others: show both "from" then "to"
           cmdBlockInner = `
             <div style="display:flex;flex-direction:column;gap:6px">
               <div style="display:flex;gap:12px;align-items:center">
-                <div>
-                </div>
+                <div></div>
                 <div>
                   <div class="cmd-label">CMD DMG from</div>
                   <div class="cmd-value" id="cmd-to-${playerId}">${outgoingTotal}</div>
@@ -609,7 +622,7 @@
         }
 
         html += `
-          <div class="player-panel" data-player-id="${playerId}">
+          <div class="player-panel${isEliminated ? ' player-eliminated' : ''}" data-player-id="${playerId}">
             <div class="player-header">
               <div>
                 <div class="player-name">${isMe ? 'YOU' : (player.name || 'Player')}</div>
@@ -665,7 +678,7 @@
           </div>
         `;
       });
-      html += `</div>`; // player-grid
+      html += `</div>`;
 
       // Chat full width below player grid
       html += `
@@ -712,7 +725,26 @@
           const targetPlayer = btn.dataset.player;
           const delta = parseInt(btn.dataset.delta || '0');
 
-          if(action === 'life'){ await updateLifeForPlayer(targetPlayer, delta); }
+          if(action === 'life'){
+            // optimistic UI: update immediately for responsiveness
+            if (targetPlayer === userId) {
+              const lifeEl = document.getElementById(`life-display-${targetPlayer}`);
+              if (lifeEl) {
+                const current = parseInt(lifeEl.textContent || '0');
+                const next = current + delta;
+                lifeEl.textContent = next;
+                // apply fade immediately if threshold reached
+                const panel = lifeEl.closest('.player-panel');
+                if (panel) {
+                  const eliminatedNow = (next <= 0);
+                  if (eliminatedNow) panel.classList.add('player-eliminated');
+                  else panel.classList.remove('player-eliminated');
+                }
+              }
+            }
+            // fire update without waiting so the UI stays snappy
+            updateLifeForPlayer(targetPlayer, delta);
+          }
           else if(action === 'cmd-toggle'){
             const controls = document.getElementById(`cmd-controls-${targetPlayer}`);
             if(!controls) return;
@@ -732,6 +764,7 @@
           else if(action === 'cmd-target-add'){
             const t = btn.dataset.target; const opp = btn.dataset.opp;
             await updateCmdDamageForTarget(opp, t, +1);
+            // after CMD edit, threshold may change; snapshot will re-render
           }
           else if(action === 'cmd-target-sub'){
             const t = btn.dataset.target; const opp = btn.dataset.opp;
@@ -872,7 +905,6 @@
     // Update opponent's outgoing to target (oppId -> targetPlayerId). Only editable when target is you.
     async function updateCmdDamageForTarget(oppId, targetPlayerId, delta){
       if(!roomId || !userId) return;
-      // only allow editing incoming values for yourself (targetPlayerId must be you)
       if(targetPlayerId !== userId) return;
       const ref = doc(db, ROOM_COLLECTION, roomId);
       try{
