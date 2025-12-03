@@ -393,8 +393,6 @@
       const countdownInterval = setInterval(()=>{
         document.querySelectorAll('.room-time-left').forEach(el=>{
           const rid = el.dataset.room;
-          // find the doc data again quickly (we could cache, but keep minimal)
-          // fetch doc once per interval per room is heavy; instead, if the room list is small it's acceptable.
           getDoc(doc(db, ROOM_COLLECTION, rid)).then(snap=>{
             if(!snap.exists()){ el.textContent = 'Closed'; return; }
             const data = snap.data();
@@ -465,6 +463,7 @@
     function hideChatCardPreviewWithDelay(){ if(chatPreviewHideTimer) clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = setTimeout(()=>{ hideChatCardPreviewImmediate(); }, 300); }
     function hideChatCardPreviewImmediate(){ const preview = document.getElementById('chat-card-preview'); const img = document.getElementById('chat-preview-img'); const t = document.getElementById('chat-preview-title'); preview.style.display = 'none'; img.src = ''; t.textContent = ''; if(chatPreviewHideTimer){ clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = null; } }
 
+    // Basic room rendering and controls (kept minimal and consistent with original layout)
     function renderRoomView(roomData){
       const appContainer = document.getElementById("app-container");
       const statusMessage = document.getElementById("status-message");
@@ -478,4 +477,444 @@
           <div>
             <h2 style="margin:0;color:var(--text)">Room: ${roomId}</h2>
             <div style="color:var(--muted);font-size:.9rem;margin-top:6px">Players: ${Object.keys(roomData.players).length}</div>
-          </
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="card-search-btn" class="btn-secondary">Card Search</button>
+            <button id="restart-game-btn" class="btn-secondary">Restart Game</button>
+            <button id="share-invite-btn" class="btn-secondary">Share Invite</button>
+            <button id="leave-room-btn" class="btn-danger">Leave Room</button>
+          </div>
+        </div>
+      `;
+
+      const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? [...roomData.playersOrder] : Object.keys(roomData.players || {});
+      if (playerIds.includes(userId)) { const idx = playerIds.indexOf(userId); if (idx > 0) { playerIds.splice(idx, 1); playerIds.unshift(userId); } }
+      else if (roomData.players && roomData.players[userId]) playerIds.unshift(userId);
+
+      html += `<div class="player-grid">`;
+      playerIds.forEach(playerId=>{
+        const player = roomData.players[playerId];
+        if(!player) return;
+        const isMe = playerId === userId;
+        const life = player.life ?? getStartingLife();
+        const commanderName = player.commanderName || player.commander || 'N/A';
+        const infectVal = player.infect || 0;
+
+        // Build per-opponent rows: show the damage that each opponent has dealt to this player.
+        let perOppRows = '';
+        const opponents = playerIds.filter(id => id !== playerId);
+        if(opponents.length > 0){
+          opponents.forEach(oppId => {
+            const dmg = (roomData.players[oppId]?.commanderDamage || {})[playerId] || 0;
+            const oppName = roomData.players[oppId]?.name || 'Player';
+            const editable = (playerId === userId);
+            const disabledAttr = editable ? '' : 'disabled';
+            perOppRows += `
+              <div class="per-opp-row" data-target="${playerId}" data-opp="${oppId}">
+                <div class="per-opp-left">From <strong>${oppName}</strong></div>
+                <div class="per-opp-controls">
+                  <button class="control-btn negative small-btn" data-action="cmd-target-sub" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>-</button>
+                  <input type="number" value="${dmg}" data-target="${playerId}" data-opp="${oppId}" class="cmd-target-input" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center" ${disabledAttr}>
+                  <button class="control-btn negative small-btn" data-action="cmd-target-add" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>+</button>
+                </div>
+              </div>
+            `;
+          });
+        }
+
+        const infectControlsHtml = `
+          <div style="display:flex;align-items:center;gap:6px">
+            <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-</button>
+            <div class="infect-value" id="infect-${playerId}">${infectVal}</div>
+            <button class="control-btn small-btn" data-action="infect-add" data-player="${playerId}" ${isMe ? '' : 'disabled'}>+</button>
+          </div>
+        `;
+
+        html += `
+          <div class="player-panel" id="panel-${playerId}">
+            <div class="player-header">
+              <div>
+                <div class="player-name">${player.name || 'Player'}</div>
+                <div class="player-sub">${commanderName}</div>
+              </div>
+              <div class="you-badge">${isMe ? 'You' : ''}</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="life-big">${life}</div>
+              <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+                <div class="controls">
+                  <button class="control-btn positive" data-action="life-add" data-player="${playerId}">+5</button>
+                  <button class="control-btn negative" data-action="life-sub" data-player="${playerId}">-5</button>
+                </div>
+                <div class="infect-block">
+                  <div class="infect-label muted">Infect</div>
+                  ${infectControlsHtml}
+                </div>
+              </div>
+            </div>
+            <div class="per-opp-container">
+              ${perOppRows}
+            </div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+
+      // Chat area (simple)
+      html += `
+        <div style="margin-top:12px">
+          <div id="chat-log"></div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input id="chat-input" placeholder="Say something..." style="flex:1">
+            <button id="chat-send" class="btn-primary">Send</button>
+          </div>
+        </div>
+      `;
+
+      appContainer.innerHTML = html;
+
+      // Wire up buttons
+      document.getElementById('leave-room-btn').addEventListener('click', async ()=>{
+        await leaveRoom();
+        renderHome();
+      });
+
+      document.querySelectorAll('[data-action="life-add"]').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const pid = e.currentTarget.dataset.player;
+          await changeLife(pid, +5);
+        });
+      });
+      document.querySelectorAll('[data-action="life-sub"]').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const pid = e.currentTarget.dataset.player;
+          await changeLife(pid, -5);
+        });
+      });
+
+      document.querySelectorAll('.cmd-target-input').forEach(input=>{
+        input.addEventListener('change', async (e)=>{
+          const target = e.target.dataset.target;
+          const opp = e.target.dataset.opp;
+          const val = parseInt(e.target.value) || 0;
+          await setCommanderDamage(userId, opp, val);
+        });
+      });
+
+      document.querySelectorAll('[data-action="cmd-target-add"]').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const target = e.currentTarget.dataset.target;
+          const opp = e.currentTarget.dataset.opp;
+          const current = parseInt(document.querySelector(`.cmd-target-input[data-target="${target}"][data-opp="${opp}"]`).value) || 0;
+          await setCommanderDamage(userId, opp, current + 1);
+        });
+      });
+      document.querySelectorAll('[data-action="cmd-target-sub"]').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const target = e.currentTarget.dataset.target;
+          const opp = e.currentTarget.dataset.opp;
+          const current = parseInt(document.querySelector(`.cmd-target-input[data-target="${target}"][data-opp="${opp}"]`).value) || 0;
+          await setCommanderDamage(userId, opp, Math.max(0, current - 1));
+        });
+      });
+
+      document.querySelectorAll('[data-action="infect-add"]').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const pid = e.currentTarget.dataset.player;
+          await changeInfect(pid, +1);
+        });
+      });
+      document.querySelectorAll('[data-action="infect-sub"]').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const pid = e.currentTarget.dataset.player;
+          await changeInfect(pid, -1);
+        });
+      });
+
+      // Chat send
+      document.getElementById('chat-send').addEventListener('click', async ()=>{
+        const input = document.getElementById('chat-input');
+        const text = input.value.trim();
+        if(!text) return;
+        await postChatMessage(text);
+        input.value = '';
+      });
+
+      // Start a watcher that will delete the room if it's expired (client-side enforcement)
+      if(roomTimeoutWatcher) { roomTimeoutWatcher(); roomTimeoutWatcher = null; }
+      roomTimeoutWatcher = onSnapshot(doc(db, ROOM_COLLECTION, roomId), async (snap)=>{
+        if(!snap.exists()){
+          // room removed
+          localStorage.removeItem('mtg_room');
+          if(unsubscribe){ unsubscribe(); unsubscribe = null; }
+          renderHome();
+          return;
+        }
+        const data = snap.data();
+        const left = timeLeftMs(data.createdAt, data.lastActivity);
+        if(left <= 0){
+          try{
+            // attempt to delete the room when expired
+            await deleteDoc(doc(db, ROOM_COLLECTION, roomId));
+          }catch(e){
+            // deletion may fail due to rules; still navigate home
+            console.warn('Could not delete expired room:', e);
+            localStorage.removeItem('mtg_room');
+            if(unsubscribe){ unsubscribe(); unsubscribe = null; }
+            renderHome();
+          }
+        }
+      });
+    }
+
+    // --- Firestore helper actions that update lastActivity ---
+    async function changeLife(playerId, delta){
+      if(!roomId) return;
+      const roomRef = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const snap = await getDoc(roomRef);
+        if(!snap.exists()) return;
+        const data = snap.data();
+        const players = data.players || {};
+        const current = players[playerId]?.life ?? getStartingLife();
+        const newLife = current + delta;
+        const update = {};
+        update[`players.${playerId}.life`] = newLife;
+        update['lastActivity'] = serverTimestamp();
+        await updateDoc(roomRef, update);
+      }catch(e){ console.error('changeLife error', e); }
+    }
+
+    async function changeInfect(playerId, delta){
+      if(!roomId) return;
+      const roomRef = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const snap = await getDoc(roomRef);
+        if(!snap.exists()) return;
+        const data = snap.data();
+        const players = data.players || {};
+        const current = players[playerId]?.infect || 0;
+        const newVal = Math.max(0, current + delta);
+        const update = {};
+        update[`players.${playerId}.infect`] = newVal;
+        update['lastActivity'] = serverTimestamp();
+        await updateDoc(roomRef, update);
+      }catch(e){ console.error('changeInfect error', e); }
+    }
+
+    // set commander damage from source (sourceId is userId) to target oppId
+    async function setCommanderDamage(sourceId, oppId, value){
+      if(!roomId) return;
+      const roomRef = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const update = {};
+        update[`players.${sourceId}.commanderDamage.${oppId}`] = value;
+        update['lastActivity'] = serverTimestamp();
+        await updateDoc(roomRef, update);
+      }catch(e){ console.error('setCommanderDamage error', e); }
+    }
+
+    async function postChatMessage(text){
+      if(!roomId) return;
+      const roomRef = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const snap = await getDoc(roomRef);
+        if(!snap.exists()) return;
+        const data = snap.data();
+        const chat = data.chat || [];
+        chat.push({ senderId: userId, senderName: data.players?.[userId]?.name || 'Player', message: text, ts: new Date().toISOString() });
+        await updateDoc(roomRef, { chat, lastActivity: serverTimestamp() });
+      }catch(e){ console.error('postChatMessage error', e); }
+    }
+
+    // --- Room lifecycle: create/join/leave/delete helpers ---
+    async function promptPassword(rid, mode){
+      // Minimal prompt flow: ask for a display name and join/create
+      const name = prompt(`${mode === 'create' ? 'Create' : 'Join'} room "${rid}". Enter your display name:`, 'Player');
+      if(!name) return;
+      if(mode === 'create') await createRoom(rid, name);
+      else await joinRoom(rid, name);
+    }
+
+    async function createRoom(rid, displayName){
+      try{
+        const roomRef = doc(db, ROOM_COLLECTION, rid);
+        const exists = (await getDoc(roomRef)).exists();
+        if(exists){
+          alert('Room already exists. Joining instead.');
+          return joinRoom(rid, displayName);
+        }
+        const initialPlayer = {
+          [userId]: {
+            name: displayName,
+            life: getStartingLife(),
+            infect: 0,
+            commander: '',
+            commanderName: '',
+            commanderImageUrl: '',
+            commanderDamage: {}
+          }
+        };
+        const payload = {
+          ownerId: userId,
+          players: initialPlayer,
+          playersOrder: [userId],
+          createdAt: serverTimestamp(),
+          lastActivity: serverTimestamp(),
+          chat: [{ senderName: 'System', message: `${displayName} created the room.`, ts: new Date().toISOString() }]
+        };
+        await setDoc(roomRef, payload);
+        // Save locally and subscribe
+        localStorage.setItem('mtg_room', rid);
+        roomId = rid;
+        if(unsubscribe) unsubscribe();
+        unsubscribe = onSnapshot(roomRef, docSnap => {
+          if(!docSnap.exists()){ localStorage.removeItem('mtg_room'); renderHome(); return; }
+          renderRoomView(docSnap.data());
+        });
+      }catch(e){ console.error('createRoom error', e); alert('Unable to create room.'); }
+    }
+
+    async function joinRoom(rid, displayName){
+      try{
+        const roomRef = doc(db, ROOM_COLLECTION, rid);
+        const snap = await getDoc(roomRef);
+        if(!snap.exists()){
+          alert('Room does not exist.');
+          return;
+        }
+        const data = snap.data();
+        const players = data.players || {};
+        if(!players[userId]){
+          // add player
+          const update = {};
+          update[`players.${userId}`] = {
+            name: displayName,
+            life: getStartingLife(),
+            infect: 0,
+            commander: '',
+            commanderName: '',
+            commanderImageUrl: '',
+            commanderDamage: {}
+          };
+          // maintain playersOrder
+          const newOrder = Array.isArray(data.playersOrder) ? [...data.playersOrder] : Object.keys(players || {});
+          if(!newOrder.includes(userId)) newOrder.push(userId);
+          update['playersOrder'] = newOrder;
+          update['lastActivity'] = serverTimestamp();
+          await updateDoc(roomRef, update);
+        }
+        // Save locally and subscribe
+        localStorage.setItem('mtg_room', rid);
+        roomId = rid;
+        if(unsubscribe) unsubscribe();
+        unsubscribe = onSnapshot(roomRef, docSnap => {
+          if(!docSnap.exists()){ localStorage.removeItem('mtg_room'); renderHome(); return; }
+          renderRoomView(docSnap.data());
+        });
+      }catch(e){ console.error('joinRoom error', e); alert('Unable to join room.'); }
+    }
+
+    async function leaveRoom(){
+      if(!roomId) return;
+      try{
+        const roomRef = doc(db, ROOM_COLLECTION, roomId);
+        const snap = await getDoc(roomRef);
+        if(!snap.exists()){ localStorage.removeItem('mtg_room'); roomId = null; return; }
+        const data = snap.data();
+        const players = data.players || {};
+        if(players[userId]){
+          // remove player
+          const update = {};
+          update[`players.${userId}`] = null; // Firestore will delete the field when set to null via updateDoc
+          // remove from playersOrder
+          const newOrder = (Array.isArray(data.playersOrder) ? data.playersOrder.filter(id => id !== userId) : []);
+          update['playersOrder'] = newOrder;
+          update['lastActivity'] = serverTimestamp();
+          await updateDoc(roomRef, update);
+        }
+        localStorage.removeItem('mtg_room');
+        roomId = null;
+        if(unsubscribe){ unsubscribe(); unsubscribe = null; }
+      }catch(e){ console.error('leaveRoom error', e); }
+    }
+
+    async function deleteAllRooms(){
+      const pwd = prompt('Enter admin password to delete all rooms:');
+      if(pwd !== DELETE_ALL_PWD) { alert('Incorrect password'); return; }
+      try{
+        const q = query(collection(db, ROOM_COLLECTION), limit(200));
+        const snap = await getDocs(q);
+        const deletes = [];
+        snap.forEach(s => deletes.push(deleteDoc(doc(db, ROOM_COLLECTION, s.id))));
+        await Promise.all(deletes);
+        alert('Deleted up to 200 rooms.');
+        renderHome();
+      }catch(e){ console.error('deleteAllRooms error', e); alert('Unable to delete rooms.'); }
+    }
+
+    // --- Auto-join saved room and auth startup (ensures refresh keeps you in lobby) ---
+    async function tryAutoJoinSavedRoom(savedRoomId){
+      if(!savedRoomId) return renderHome();
+      try{
+        const snap = await getDoc(doc(db, ROOM_COLLECTION, savedRoomId));
+        if(snap.exists()){
+          roomId = savedRoomId;
+          localStorage.setItem('mtg_room', roomId);
+          if(unsubscribe) unsubscribe();
+          unsubscribe = onSnapshot(doc(db, ROOM_COLLECTION, roomId), docSnap => {
+            if(!docSnap.exists()){
+              localStorage.removeItem('mtg_room');
+              roomId = null;
+              if(unsubscribe){ unsubscribe(); unsubscribe = null; }
+              renderHome();
+              return;
+            }
+            renderRoomView(docSnap.data());
+          });
+          return;
+        } else {
+          localStorage.removeItem('mtg_room');
+          return renderHome();
+        }
+      }catch(err){
+        console.error('Auto-join error', err);
+        return renderHome();
+      }
+    }
+
+    async function startApp(){
+      try{
+        await signInAnonymously(auth);
+      }catch(e){
+        console.warn('Anonymous sign-in error (may be fine):', e);
+      }
+
+      onAuthStateChanged(auth, async (user) => {
+        if(user){
+          userId = user.uid;
+          const savedRoom = localStorage.getItem('mtg_room');
+          if(savedRoom){
+            await tryAutoJoinSavedRoom(savedRoom);
+          } else {
+            renderHome();
+          }
+        } else {
+          renderHome();
+        }
+      });
+    }
+
+    // Start the app
+    startApp();
+
+    // Initial navigation
+    const initialPage = (location.hash || '#home').replace('#','') || 'home';
+    setActiveNav(initialPage);
+    if(initialPage === 'home') renderHome();
+    else if(initialPage === 'changes') renderChanges();
+    else if(initialPage === 'contact') renderContact();
+
+  </script>
+</body>
+</html>
