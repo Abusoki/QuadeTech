@@ -495,7 +495,7 @@
           if(outgoing.length === 0) outgoingHtml += `<div class="outgoing-cmd-item" style="justify-content:center;color:var(--muted)">No opponents yet</div>`;
           else {
             outgoing.forEach(item=>{
-              outgoingHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">CMD DMG ${item.oppName}</div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
+              outgoingHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">CMD DMG to ${item.oppName}:</div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
             });
           }
           outgoingHtml += '</div>';
