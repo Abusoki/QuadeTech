@@ -121,6 +121,23 @@
             display: flex;
             gap: 5px;
         }
+        
+        /* NEW: Editable damage input style */
+        .damage-input {
+            width: 50px; /* Small width */
+            padding: 4px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1em;
+            margin: 0;
+            height: auto;
+            border: 1px solid #ccc;
+            background-color: white;
+        }
+        .damage-input.lethal {
+            color: red;
+            border-color: red;
+        }
 
         /* --- Lobby Features --- */
         #lobby-features button {
@@ -224,7 +241,7 @@
             font-size: 0.9em;
         }
         
-        /* NEW Title Styles */
+        /* Title Styles */
         .app-title {
             color: #2c3e50;
             margin-bottom: 5px;
@@ -392,6 +409,7 @@
                     opponents.forEach(oppId => {
                         const opp = roomData.players[oppId];
                         const dmg = player.commanderDamage?.[oppId] || 0;
+                        const isLethal = dmg >= 21;
                         let dmgControls = '';
                         
                         if (isMe) {
@@ -407,7 +425,15 @@
                             <div class="damage-row">
                                 <span style="font-size:0.9em;">From **${opp.name}** [${opp.commander || 'N/A'}]</span>
                                 <div style="display:flex; align-items:center; gap:10px;">
-                                    <strong style="color:${dmg >= 21 ? 'red' : 'black'}">${dmg}</strong>
+                                    <input 
+                                        type="number" 
+                                        min="0"
+                                        value="${dmg}" 
+                                        data-opp="${oppId}"
+                                        class="damage-input ${isLethal ? 'lethal' : ''}"
+                                        onchange="updateCmdDamageDirectly(this.dataset.opp, this.value)"
+                                        style="width: 50px;"
+                                    >
                                     ${dmgControls}
                                 </div>
                             </div>
@@ -530,6 +556,9 @@
                 document.getElementById('modal-card-name').value = '';
                 document.getElementById('search-results').innerHTML = '';
             });
+            
+            // Make updateCmdDamageDirectly globally accessible (since it's used in onchange attribute)
+            window.updateCmdDamageDirectly = updateCmdDamageDirectly; 
         }
         
         // --- CHAT DATA UPDATE FUNCTION ---
@@ -589,23 +618,48 @@
 
                     const currentDamageMap = currentPlayer.commanderDamage || {};
                     const currentDamage = currentDamageMap[oppId] || 0;
-                    const newDamage = Math.max(0, currentDamage + delta);
+                    // Ensure damage doesn't go below zero
+                    const newDamage = Math.max(0, currentDamage + delta); 
 
-                    currentDamageMap[oppId] = newDamage;
-
-                    await setDoc(ref, {
-                        players: { 
-                            [userId]: { 
-                                ...currentPlayer,
-                                commanderDamage: currentDamageMap
-                            } 
-                        },
-                        lastActive: serverTimestamp()
-                    }, { merge: true });
+                    // Call the direct update function to save the new value
+                    await updateCmdDamageDirectly(oppId, newDamage);
 
                 }
             } catch(e) { console.error("Error updating commander damage:", e); }
         }
+        
+        // NEW: Function to handle direct input changes
+        async function updateCmdDamageDirectly(oppId, newValue) {
+            if (!roomId || !userId) return;
+            const ref = doc(db, ROOM_COLLECTION, roomId);
+
+            // Clean and validate input: ensure it's a non-negative integer
+            const newDamage = Math.max(0, parseInt(newValue) || 0);
+
+            try {
+                const snap = await getDoc(ref);
+                if (!snap.exists()) return;
+
+                const data = snap.data();
+                const currentPlayer = data.players[userId];
+                if (!currentPlayer) return;
+
+                const currentDamageMap = currentPlayer.commanderDamage || {};
+                currentDamageMap[oppId] = newDamage;
+
+                await setDoc(ref, {
+                    players: { 
+                        [userId]: { 
+                            ...currentPlayer,
+                            commanderDamage: currentDamageMap
+                        } 
+                    },
+                    lastActive: serverTimestamp()
+                }, { merge: true });
+
+            } catch(e) { console.error("Error setting commander damage directly:", e); }
+        }
+
 
         // --- SETUP & LIST VIEWS ---
         
@@ -682,12 +736,11 @@
                 <input type="text" id="commander-input" placeholder="Your Commander's Name (e.g., Urza)">
                 <input type="password" id="pwd-input" placeholder="Room Password">
                 <button id="action-btn" class="btn-primary">${btnText}</button>
-                <button id="cancel-btn" class="btn-danger">Cancel</button> <p id="err-msg" style="color:red"></p>
+                <button id="cancel-btn" class="btn-danger">Cancel</button> 
+                <p id="err-msg" style="color:red"></p>
             `;
             
-            // NEW: Exit/Cancel button listener
             document.getElementById("cancel-btn").onclick = () => {
-                // Clear URL param on cancel
                 window.history.pushState({}, document.title, window.location.pathname); 
                 renderSetupView();
             };
@@ -784,7 +837,10 @@
 
             let listHtml = '<p>Loading active rooms...</p>';
             appContainer.innerHTML = `
-                <h1 class="app-title">Cardboard Bonfire 🔥</h1> <p class="app-subtitle">Life tracker for keeping life and bringing people together.</p> <div style="margin-bottom:20px;">
+                <h1 class="app-title">Cardboard Bonfire 🔥</h1> 
+                <p class="app-subtitle">Life tracker for keeping life and bringing people together.</p> 
+                
+                <div style="margin-bottom:20px;">
                     <input type="text" id="search-input" placeholder="Enter Room ID to Create/Search">
                     <button id="search-btn" class="btn-primary">Find or Create Room</button>
                 </div>
