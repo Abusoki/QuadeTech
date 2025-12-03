@@ -45,9 +45,11 @@
             -webkit-box-shadow: none !important;
         }
         
-        /* **FIX 2 - AGGRESSIVE FOCUS REMOVAL 2 (Targeted Input Border)** */
-        input:focus {
+        /* **FIX 2 - AGGRESSIVE FOCUS REMOVAL 2 (Targeted Input/Button Border)** */
+        input:focus,
+        button:focus {
             border-color: #444 !important; /* Force border to stay dark on focus */
+            background-color: inherit !important;
         }
 
         button {
@@ -131,49 +133,15 @@
         .cmd-name {
             font-size: 0.9em;
             color: #aaa; /* Lighter gray for subtext */
-            position: relative; /* Needed for tooltip positioning */
             display: inline-block;
-            cursor: help;
+            cursor: pointer; /* clearer pointer intent */
         }
         
         /* --- Tooltip/Card Hover Styles (Game View) --- */
+        /* Left in place but no longer used; preview uses fixed left box now. */
         .card-tooltip {
-            visibility: hidden;
-            width: 250px;
-            background-color: #1e1e1e;
-            color: #fff;
-            text-align: center;
-            border-radius: 6px;
-            padding: 5px;
-            position: absolute;
-            z-index: 10; /* Ensure tooltip is above other elements */
-            bottom: 125%; /* Default: ABOVE */
-            left: 50%;
-            margin-left: -125px; /* Center the tooltip */
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none; 
-            border: 2px solid #2980b9;
+            display: none; /* disable tooltip visibility entirely */
         }
-        
-        /* --- Tooltip Class for positioning BELOW --- */
-        .card-tooltip.bottom {
-            top: 125%; /* Position the tooltip BELOW the text */
-            bottom: auto; 
-        }
-
-        .card-tooltip img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 4px;
-        }
-        
-        .cmd-name:hover .card-tooltip {
-            visibility: visible;
-            opacity: 1;
-        }
-        /* -------------------------------------- */
-
 
         .btn-life {
             padding: 8px 12px;
@@ -632,19 +600,14 @@
                     lifeDisplayHtml = `<span class="life-total">${player.life}</span>`;
                 }
                 
-                // Commander Name with Hover
+                // Commander Name (hover will use fixed preview box)
                 const commanderName = player.commanderName || player.commander || 'N/A';
-                const commanderImage = player.commanderImageUrl || '';
 
-                const commanderHtml = commanderImage ? `
+                const commanderHtml = `
                     <div class="cmd-name" id="cmd-name-${playerId}">
                         [${commanderName}]
-                        <span class="card-tooltip">
-                            <img src="${commanderImage}" alt="${commanderName}">
-                        </span>
                     </div>
-                ` : `<div class="cmd-name">[${commanderName}]</div>`;
-
+                `;
 
                 let damageRows = '';
                 const opponents = playerIds.filter(id => id !== playerId);
@@ -666,7 +629,6 @@
                             `;
                         }
                         
-                        // Use the verified commander name for display
                         const oppCmdName = opp.commanderName || opp.commander || 'N/A';
 
                         damageRows += `
@@ -735,27 +697,7 @@
             // --- RENDER CHAT LOG ---
             renderChat(roomData.chatLog || [], currentPlayerName);
 
-
             // --- ATTACH LISTENERS ---
-            
-            // Tooltip Cutoff Fix (In-Game View: Toggle Top/Bottom)
-            playerIds.forEach(playerId => {
-                const cmdElement = document.getElementById(`cmd-name-${playerId}`);
-                if (cmdElement) {
-                    const rect = cmdElement.getBoundingClientRect();
-                    const tooltip = cmdElement.querySelector('.card-tooltip');
-                    
-                    if (tooltip) {
-                        // Check if the element is in the top 30% of the container (arbitrary safe space)
-                        if (rect.top < 200) { 
-                            tooltip.classList.add('bottom');
-                        } else {
-                            tooltip.classList.remove('bottom');
-                        }
-                    }
-                }
-            });
-
             document.querySelectorAll('.btn-life').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.target.classList.add('tapped');
@@ -837,6 +779,29 @@
             // Make updateCmdDamageDirectly and updateLifeDirectly globally accessible
             window.updateCmdDamageDirectly = updateCmdDamageDirectly; 
             window.updateLifeDirectly = updateLifeDirectly; 
+
+            // --- NEW: Commander hover preview in game view ---
+            const previewCard = document.getElementById('lobby-card-preview');
+            const previewImg = document.getElementById('preview-img');
+
+            playerIds.forEach(playerId => {
+                const cmdElement = document.getElementById(`cmd-name-${playerId}`);
+                if (cmdElement) {
+                    const imgUrl = roomData.players[playerId].commanderImageUrl;
+                    cmdElement.addEventListener('mouseenter', () => {
+                        if (imgUrl && previewCard && previewImg) {
+                            previewImg.src = imgUrl;
+                            previewCard.style.display = 'block';
+                        }
+                    });
+                    cmdElement.addEventListener('mouseleave', () => {
+                        if (previewCard && previewImg) {
+                            previewCard.style.display = 'none';
+                            previewImg.src = '';
+                        }
+                    });
+                }
+            });
         }
         
         // --- CHAT DATA UPDATE FUNCTION ---
@@ -1273,7 +1238,7 @@
                     });
                 });
                 
-                // **FIX 1 - Hover Listener with Redundant Checks and Logging**
+                // Lobby hover preview (fixed left box)
                 listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan => {
                     const imageUrl = cmdSpan.dataset.imgUrl;
 
@@ -1281,7 +1246,6 @@
                         if (imageUrl && previewCard && previewImg) {
                             previewImg.src = imageUrl;
                             previewCard.style.display = 'block';
-                            // console.log('Hover active for:', cmdSpan.textContent, 'Image:', imageUrl); // Debugging
                         }
                     });
 
@@ -1289,7 +1253,6 @@
                         if (previewCard) {
                             previewCard.style.display = 'none';
                             previewImg.src = ''; 
-                            // console.log('Hover inactive'); // Debugging
                         }
                     });
                 });
