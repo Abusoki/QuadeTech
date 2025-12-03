@@ -260,7 +260,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import {
             getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp,
-            arrayUnion, deleteDoc, collection, getDocs, query, limit
+            arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ----------------------------------------------------------------------
@@ -1082,24 +1082,75 @@
                 const commander = document.getElementById("commander-input").value.trim();
                 const pwd = document.getElementById("pwd-input").value;
                 const errMsg = document.getElementById("err-msg");
+                const actionBtn = document.getElementById("action-btn");
                 if(!name || !pwd || !commander){ errMsg.textContent = "Player Name, Commander, and Password are required."; return; }
                 errMsg.textContent = "Verifying commander and joining...";
-                document.getElementById("action-btn").disabled = true;
+                actionBtn.disabled = true;
+
                 const validationResult = await validateCommander(commander);
-                if(!validationResult){ errMsg.textContent = `Commander "${commander}" not found on Scryfall.`; document.getElementById("action-btn").disabled = false; return; }
+                if(!validationResult){
+                    errMsg.textContent = `Commander "${commander}" not found on Scryfall. Please check spelling or use the Card Search tool.`;
+                    actionBtn.disabled = false;
+                    return;
+                }
                 const { validatedName, imageUrl } = validationResult;
+
+                const ref = doc(db, ROOM_COLLECTION, rid);
+                const snap = await getDoc(ref);
                 if(mode === 'join'){
-                    const ref = doc(db, ROOM_COLLECTION, rid);
-                    const snap = await getDoc(ref);
                     if(snap.exists()){
                         const data = snap.data();
-                        if(await checkAndDeleteIfExpired(rid, data)){ errMsg.textContent = "Room expired and was deleted."; setTimeout(()=> navigateTo('home'),2000); return; }
-                        if(data.passwordHash === hashPassword(pwd)){ listenToRoom(rid, name, validatedName, imageUrl); }
-                        else{ errMsg.textContent = "Wrong password."; document.getElementById("action-btn").disabled = false; }
-                    } else { errMsg.textContent = "Room no longer exists."; document.getElementById("action-btn").disabled = false; }
+                        if (await checkAndDeleteIfExpired(rid, data)) {
+                            errMsg.textContent = "Room expired and was deleted.";
+                            actionBtn.disabled = false;
+                            setTimeout(()=> navigateTo('home'),2000);
+                            return;
+                        }
+                        if(data.passwordHash === hashPassword(pwd)){
+                            try {
+                                // Add the joining player immediately (avoid waiting on listener to add them)
+                                // Use updateDoc with field path to avoid overwriting the entire players map
+                                const playerObj = {
+                                    life: getStartingLife(),
+                                    commanderDamage: {},
+                                    infect: 0,
+                                    name,
+                                    commanderName: validatedName,
+                                    commanderImageUrl: imageUrl
+                                };
+                                await updateDoc(ref, {
+                                    ['players.' + userId]: playerObj,
+                                    lastActive: serverTimestamp()
+                                });
+                                // Start listening after we've added the player
+                                listenToRoom(rid);
+                            } catch (e) {
+                                console.error("Failed to add joining player:", e);
+                                errMsg.textContent = "Failed to join room. Try again.";
+                                actionBtn.disabled = false;
+                            }
+                        } else {
+                            errMsg.textContent = "Wrong password.";
+                            actionBtn.disabled = false;
+                        }
+                    } else {
+                        errMsg.textContent = "Room no longer exists.";
+                        actionBtn.disabled = false;
+                    }
                 } else {
-                    if(pwd.length < 3){ errMsg.textContent = "Password too short."; document.getElementById("action-btn").disabled = false; return; }
-                    createRoom(rid, pwd, name, validatedName, imageUrl);
+                    // create mode
+                    if(pwd.length < 3){
+                        errMsg.textContent = "Password too short.";
+                        actionBtn.disabled = false;
+                        return;
+                    }
+                    try {
+                        await createRoom(rid, pwd, name, validatedName, imageUrl);
+                    } catch (e) {
+                        console.error("Create room failed:", e);
+                        errMsg.textContent = "Failed to create room. Try again.";
+                        actionBtn.disabled = false;
+                    }
                 }
             };
         }
@@ -1126,7 +1177,7 @@
                     }
                 });
                 listenToRoom(rid);
-            }catch(e){ console.error(e); }
+            }catch(e){ console.error(e); throw e; }
         }
 
         function listenToRoom(rid, newName=null, newCommanderName=null, newCommanderImageUrl=null){
