@@ -983,8 +983,7 @@
 
         await setDoc(ref, { players: { [oppId]: opponent }, lastActive: serverTimestamp() }, { merge: true });
       }catch(e){
-        console.error("Error setting commander damage for target directly (opp -> 
-        target):", e);
+        console.error("Error setting commander damage for target directly (opp -> target):", e);
       }
     }
 
