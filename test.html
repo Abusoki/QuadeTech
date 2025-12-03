@@ -248,7 +248,7 @@
     async function renderHome(){ await renderSetupView(); }
 
     const CHANGELOG = [
-      { version: "0.9.7", date: "2025-12-07", notes: "Show CMD DMG to/from on each panel; incoming editor updates opponent's outgoing." },
+      { version: "0.9.7", date: "2025-12-07", notes: "Show  to/from on each panel; incoming editor updates opponent's outgoing." },
       { version: "0.9.6", date: "2025-12-06", notes: "Stable player order and edit restrictions; UI polish." }
     ];
 
@@ -495,7 +495,7 @@
           if(outgoing.length === 0) outgoingHtml += `<div class="outgoing-cmd-item" style="justify-content:center;color:var(--muted)">No opponents yet</div>`;
           else {
             outgoing.forEach(item=>{
-              outgoingHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">CMD DMG to ${item.oppName}:</div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
+              outgoingHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">CMD DMG ${item.oppName}:</div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
             });
           }
           outgoingHtml += '</div>';
