@@ -77,11 +77,28 @@
             align-items: center;
             margin-bottom: 15px;
         }
-        .life-total {
+        
+        /* NEW: Editable life input style */
+        .life-input {
+            font-size: 2.5em;
+            font-weight: 800;
+            color: #2c3e50;
+            width: 100px; /* Wider input for life total */
+            padding: 0;
+            border: none;
+            text-align: left;
+            background: none;
+            box-sizing: content-box;
+            height: 1.5em; /* Match line height */
+            line-height: 1.5em;
+        }
+        
+        .life-total { /* Kept for opponents */
             font-size: 2.5em;
             font-weight: 800;
             color: #2c3e50;
         }
+
         .player-name-display {
             font-size: 1.1em;
             font-weight: 600;
@@ -122,9 +139,9 @@
             gap: 5px;
         }
         
-        /* NEW: Editable damage input style */
+        /* Editable damage input style */
         .damage-input {
-            width: 50px; /* Small width */
+            width: 50px; 
             padding: 4px;
             text-align: center;
             font-weight: bold;
@@ -390,7 +407,18 @@
                 const isMe = playerId === userId;
                 
                 let lifeControls = '';
+                let lifeDisplayHtml = ''; 
+                
                 if (isMe) {
+                    // Current Player: Editable Life Total and Controls
+                    lifeDisplayHtml = `
+                        <input 
+                            type="number" 
+                            value="${player.life}" 
+                            class="life-input"
+                            onchange="updateLifeDirectly(this.value)"
+                        >`;
+                    
                     lifeControls = `
                         <div class="control-group">
                             <button class="btn-life" data-type="life" data-val="-1">-1</button>
@@ -399,6 +427,9 @@
                             <button class="btn-life" data-type="life" data-val="+5">+5</button>
                         </div>
                     `;
+                } else {
+                    // Opponent: Static Life Total
+                    lifeDisplayHtml = `<span class="life-total">${player.life}</span>`;
                 }
 
                 let damageRows = '';
@@ -448,7 +479,7 @@
                             <div class="life-display">
                                 <div class="player-name-display">${isMe ? 'YOU' : player.name}</div>
                                 <div class="cmd-name">[${player.commander || 'N/A'}]</div>
-                                <span class="life-total">${player.life}</span>
+                                ${lifeDisplayHtml}
                             </div>
                             ${lifeControls}
                         </div>
@@ -557,8 +588,9 @@
                 document.getElementById('search-results').innerHTML = '';
             });
             
-            // Make updateCmdDamageDirectly globally accessible (since it's used in onchange attribute)
+            // Make updateCmdDamageDirectly and updateLifeDirectly globally accessible
             window.updateCmdDamageDirectly = updateCmdDamageDirectly; 
+            window.updateLifeDirectly = updateLifeDirectly; // New global function
         }
         
         // --- CHAT DATA UPDATE FUNCTION ---
@@ -587,6 +619,27 @@
 
 
         // --- DATA UPDATES ---
+        
+        // NEW: Function to handle direct life total input changes
+        async function updateLifeDirectly(newValue) {
+            if (!roomId || !userId) return;
+            const ref = doc(db, ROOM_COLLECTION, roomId);
+
+            // Clean input: ensure it's an integer (can be negative)
+            const newLife = parseInt(newValue) || 0;
+
+            try {
+                const snap = await getDoc(ref);
+                if (!snap.exists()) return;
+
+                await setDoc(ref, {
+                    players: { [userId]: { life: newLife } },
+                    lastActive: serverTimestamp()
+                }, { merge: true });
+
+            } catch(e) { console.error("Error setting life total directly:", e); }
+        }
+
 
         async function updateLife(delta) {
             if (!roomId || !userId) return;
@@ -597,10 +650,8 @@
                     const data = snap.data();
                     const cur = data.players[userId]?.life ?? getStartingLife();
                     
-                    await setDoc(ref, {
-                        players: { [userId]: { life: cur + delta } },
-                        lastActive: serverTimestamp()
-                    }, { merge: true });
+                    // Call the direct update function to save the new value
+                    await updateLifeDirectly(cur + delta);
                 }
             } catch(e) { console.error(e); }
         }
@@ -618,7 +669,6 @@
 
                     const currentDamageMap = currentPlayer.commanderDamage || {};
                     const currentDamage = currentDamageMap[oppId] || 0;
-                    // Ensure damage doesn't go below zero
                     const newDamage = Math.max(0, currentDamage + delta); 
 
                     // Call the direct update function to save the new value
@@ -628,7 +678,7 @@
             } catch(e) { console.error("Error updating commander damage:", e); }
         }
         
-        // NEW: Function to handle direct input changes
+        // Function to handle direct commander damage input changes
         async function updateCmdDamageDirectly(oppId, newValue) {
             if (!roomId || !userId) return;
             const ref = doc(db, ROOM_COLLECTION, roomId);
