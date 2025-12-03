@@ -103,10 +103,44 @@
         .cmd-controls{display:none;margin-top:10px}
         .cmd-controls.open{display:block}
 
+        /* --- Per-opponent CMD display (static, fixed rows) --- */
+        .per-opp-container{
+            margin-top:10px;
+            display:flex;
+            flex-direction:column;
+            gap:6px;
+            max-height:160px;
+            overflow:auto;
+            border-top:1px solid rgba(255,255,255,0.02);
+            padding-top:8px;
+        }
+        .per-opp-row{
+            height:44px; /* fixed height so rows don't shift */
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:8px;
+            padding:6px 8px;
+            border-radius:8px;
+            background:rgba(255,255,255,0.01);
+            border:1px solid rgba(255,255,255,0.02);
+            box-sizing:border-box;
+        }
+        .per-opp-left{font-size:0.9em;color:var(--muted);font-weight:700}
+        .per-opp-controls{display:flex;align-items:center;gap:8px}
+
         /* --- Infect small tracker --- */
         .infect-block{margin-top:8px;display:flex;align-items:center;gap:8px}
         .infect-label{font-size:0.85rem;color:var(--muted)}
-        .infect-value{font-weight:800;color:#bfe6a8}
+        .infect-value{font-weight:800;color:#bfe6a8;min-width:36px;text-align:center}
+
+        /* small button style (for infect +/- and compact cmd +/-) */
+        .small-btn{
+            padding:6px 8px;
+            font-size:0.85rem;
+            min-width:36px;
+            border-radius:6px;
+        }
 
         /* --- Chat area --- */
         #chat-log{height:150px;overflow-y:auto;border:1px solid rgba(255,255,255,0.03);padding:10px;margin-bottom:10px;border-radius:8px;background:#0f1113;font-size:.9em}
@@ -155,24 +189,6 @@
         .muted{color:var(--muted)}
         .row{display:flex;gap:8px;align-items:center}
         .col{display:flex;flex-direction:column;gap:8px}
-
-        /* --- Preview button specific styling to center text/icon --- */
-        .control-btn.preview {
-            padding:8px 10px;
-            min-width:72px;
-            display:inline-flex;
-            align-items:center;
-            justify-content:center;
-            gap:8px;
-        }
-        .control-btn.preview .preview-icon {
-            width:16px;
-            height:16px;
-            display:inline-block;
-            background:linear-gradient(180deg,#fff, #ddd);
-            border-radius:3px;
-            box-shadow:inset 0 -1px 0 rgba(0,0,0,0.15);
-        }
 
         @media(max-width:720px){header.app-header{flex-direction:column;align-items:flex-start;gap:8px}#lobby-card-preview{display:none!important}#chat-card-preview{display:none!important}}
     </style>
@@ -292,34 +308,16 @@
         async function checkAndDeleteIfExpired(roomIdToCheck, roomData) {
             try {
                 if (!roomData) return false;
-                // lastActive may be a Firestore Timestamp or a JS Date depending on source
                 const lastActiveField = roomData.lastActive;
                 let lastActiveDate = null;
-
-                if (!lastActiveField) {
-                    return false;
-                }
-
-                // Firestore Timestamp has toDate()
-                if (typeof lastActiveField.toDate === 'function') {
-                    lastActiveDate = lastActiveField.toDate();
-                } else if (lastActiveField instanceof Date) {
-                    lastActiveDate = lastActiveField;
-                } else if (typeof lastActiveField === 'number') {
-                    lastActiveDate = new Date(lastActiveField);
-                } else {
-                    // Unknown format
-                    return false;
-                }
-
+                if (!lastActiveField) return false;
+                if (typeof lastActiveField.toDate === 'function') lastActiveDate = lastActiveField.toDate();
+                else if (lastActiveField instanceof Date) lastActiveDate = lastActiveField;
+                else if (typeof lastActiveField === 'number') lastActiveDate = new Date(lastActiveField);
+                else return false;
                 const elapsedMinutes = (Date.now() - lastActiveDate.getTime()) / (1000 * 60);
                 if (elapsedMinutes > TIMEOUT_MINUTES) {
-                    // Delete the room document
-                    try {
-                        await deleteDoc(doc(db, ROOM_COLLECTION, roomIdToCheck));
-                    } catch (e) {
-                        console.error("Failed to delete expired room:", e);
-                    }
+                    try { await deleteDoc(doc(db, ROOM_COLLECTION, roomIdToCheck)); } catch (e) { console.error("Failed to delete expired room:", e); }
                     return true;
                 }
                 return false;
@@ -402,8 +400,8 @@
         async function renderHome(){ await renderSetupView(); }
 
         const CHANGELOG = [
-            { version: "0.9.4", date: "2025-12-04", notes: "Persistent CMD panels, infect tracking, per-target commander damage editing, preview styling." },
-            { version: "0.9.3", date: "2025-12-03", notes: "CMD DMG toggle persistence and improved Card Search posting to chat." }
+            { version: "0.9.5", date: "2025-12-05", notes: "UI tweaks: static CMD rows, compact infect controls, preview button adjustments." },
+            { version: "0.9.4", date: "2025-12-04", notes: "Persistent CMD panels, infect tracking, per-target commander damage editing, preview styling." }
         ];
 
         function renderChanges(){
@@ -622,7 +620,7 @@
             const currentPlayerName = roomData.players[userId]?.name || 'You';
             statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
 
-            // header + controls (including restart and edit commander will be in panels)
+            // header + controls
             let html = `
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
                     <div>
@@ -649,7 +647,7 @@
                 const commanderName = player.commanderName || player.commander || 'N/A';
                 const infectVal = player.infect || 0;
 
-                // Build per-opponent commander damage rows for this player
+                // Build per-opponent commander damage rows for this player (damage this player has taken from each opponent)
                 let perOppRows = '';
                 const opponents = playerIds.filter(id => id !== playerId);
                 if(opponents.length > 0){
@@ -657,17 +655,28 @@
                         const dmg = (player.commanderDamage && player.commanderDamage[oppId]) || 0;
                         const oppName = roomData.players[oppId]?.name || 'Player';
                         perOppRows += `
-                            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
-                                <div style="font-size:0.9em;color:var(--muted);">From <strong>${oppName}</strong></div>
-                                <div style="display:flex;gap:8px;align-items:center;">
-                                    <button class="control-btn negative" data-action="cmd-target-sub" data-target="${playerId}" data-opp="${oppId}">-</button>
+                            <div class="per-opp-row" data-target="${playerId}" data-opp="${oppId}">
+                                <div class="per-opp-left">From <strong>${oppName}</strong></div>
+                                <div class="per-opp-controls">
+                                    <button class="control-btn negative small-btn" data-action="cmd-target-sub" data-target="${playerId}" data-opp="${oppId}">-</button>
                                     <input type="number" value="${dmg}" data-target="${playerId}" data-opp="${oppId}" class="cmd-target-input" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center">
-                                    <button class="control-btn negative" data-action="cmd-target-add" data-target="${playerId}" data-opp="${oppId}">+</button>
+                                    <button class="control-btn negative small-btn" data-action="cmd-target-add" data-target="${playerId}" data-opp="${oppId}">+</button>
                                 </div>
                             </div>
                         `;
                     });
+                } else {
+                    perOppRows = `<div style="color:var(--muted);font-size:0.9em">No opponents yet</div>`;
                 }
+
+                // Infect controls (compact, next to value)
+                const infectControlsHtml = `
+                    <div style="display:flex;align-items:center;gap:6px">
+                        <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}">-</button>
+                        <div class="infect-value" id="infect-${playerId}">${infectVal}</div>
+                        <button class="control-btn small-btn" data-action="infect-add" data-player="${playerId}">+</button>
+                    </div>
+                `;
 
                 html += `
                     <div class="player-panel" data-player-id="${playerId}">
@@ -689,7 +698,7 @@
                                 <div style="margin-top:8px">
                                     <div class="cmd-block">
                                         <div>
-                                            <div class="cmd-label">CMD DMG (incoming)</div>
+                                            <div class="cmd-label">CMD DMG</div>
                                             <div class="cmd-value" id="cmd-total-${playerId}">${computeIncomingCmdDamage(roomData, playerId)}</div>
                                         </div>
                                         <div style="text-align:right">
@@ -698,9 +707,12 @@
                                         </div>
                                     </div>
 
-                                    <div class="infect-block">
-                                        <div class="infect-label">Infect</div>
-                                        <div class="infect-value" id="infect-${playerId}">${infectVal}</div>
+                                    <div class="infect-block" style="margin-top:8px">
+                                        ${infectControlsHtml}
+                                    </div>
+
+                                    <div class="per-opp-container" id="per-opp-${playerId}">
+                                        ${perOppRows}
                                     </div>
                                 </div>
                             </div>
@@ -708,20 +720,15 @@
                             <div style="min-width:220px;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
                                 <div class="controls" style="flex-direction:column;width:100%">
                                     <div style="display:flex;gap:8px;width:100%">
-                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-5" ${isMe ? '' : ''}>-5</button>
-                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-1" ${isMe ? '' : ''}>-1</button>
-                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+1" ${isMe ? '' : ''}>+1</button>
-                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+5" ${isMe ? '' : ''}>+5</button>
+                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-5">-5</button>
+                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-1">-1</button>
+                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+1">+1</button>
+                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+5">+5</button>
                                     </div>
                                     <div style="display:flex;gap:8px;width:100%">
-                                        <button class="control-btn" data-action="cmd-toggle" data-player="${playerId}" ${isMe ? '' : ''}>CMD DMG</button>
-                                        <button class="control-btn preview" data-action="show-commander" data-player="${playerId}"><span class="preview-icon" aria-hidden="true"></span><span style="font-weight:700">Preview</span></button>
+                                        <button class="control-btn" data-action="cmd-toggle" data-player="${playerId}">CMD DMG</button>
+                                        ${!isMe ? `<button class="control-btn preview" data-action="show-commander" data-player="${playerId}">Preview</button>` : ''}
                                         ${isMe ? `<button class="control-btn" data-action="edit-commander" data-player="${playerId}">Edit Commander</button>` : ''}
-                                    </div>
-                                    <div style="display:flex;gap:8px;width:100%;margin-top:6px;align-items:center">
-                                        <button class="control-btn" data-action="infect-sub" data-player="${playerId}">-</button>
-                                        <div style="font-size:0.9em;color:var(--muted);">Adjust Infect</div>
-                                        <button class="control-btn" data-action="infect-add" data-player="${playerId}">+</button>
                                     </div>
                                 </div>
                             </div>
@@ -729,8 +736,10 @@
 
                         <div class="cmd-controls" id="cmd-controls-${playerId}">
                             <div style="display:flex;flex-direction:column;gap:8px">
-                                <div style="font-weight:700;color:var(--muted);font-size:0.9em">Adjust damage taken by this player from other commanders</div>
-                                ${perOppRows}
+                                <div style="font-weight:700;color:var(--muted);font-size:0.9em">Edit this player's commander damage values</div>
+                                <div style="max-height:160px;overflow:auto">
+                                    ${perOppRows}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -788,10 +797,8 @@
                     const delta = parseInt(btn.dataset.delta || '0');
 
                     if(action === 'life'){
-                        // allow editing life for any player (you can adjust any player's life)
                         await updateLifeForPlayer(targetPlayer, delta);
                     } else if(action === 'cmd-toggle'){
-                        // persistent toggle: open/close and remain until toggled again
                         const controls = document.getElementById(`cmd-controls-${targetPlayer}`);
                         if(!controls) return;
                         const isOpen = controls.classList.toggle('open');
@@ -827,7 +834,7 @@
                 });
             });
 
-            // attach inputs for per-target direct edits
+            // attach inputs for per-target direct edits (static rows)
             document.querySelectorAll('.cmd-target-input').forEach(input => {
                 input.addEventListener('change', async (e) => {
                     const target = input.dataset.target;
@@ -896,10 +903,8 @@
                 else modalSuggestionsList.innerHTML = '';
             });
 
-            // close preview when clicking outside (no auto-close of cmd-controls)
-            document.addEventListener('click', (e)=>{
-                // keep cmd-controls open until toggled
-            });
+            // keep cmd-controls open until toggled
+            document.addEventListener('click', (e)=>{});
         }
 
         // ----------------------------------------------------------------------
@@ -1145,8 +1150,6 @@
                         }
                         if(data.passwordHash === hashPassword(pwd)){
                             try {
-                                // Add the joining player immediately (avoid waiting on listener to add them)
-                                // Use updateDoc with field path to avoid overwriting the entire players map
                                 const playerObj = {
                                     life: getStartingLife(),
                                     commanderDamage: {},
@@ -1159,7 +1162,6 @@
                                     ['players.' + userId]: playerObj,
                                     lastActive: serverTimestamp()
                                 });
-                                // Start listening after we've added the player
                                 listenToRoom(rid);
                             } catch (e) {
                                 console.error("Failed to add joining player:", e);
@@ -1175,7 +1177,6 @@
                         actionBtn.disabled = false;
                     }
                 } else {
-                    // create mode
                     if(pwd.length < 3){
                         errMsg.textContent = "Password too short.";
                         actionBtn.disabled = false;
