@@ -38,13 +38,16 @@
             color: #f0f0f0; /* Light input text */
         }
         
-        /* GUARANTEED FIX: Removes the blue line/outline/shadow on input focus */
-        /* Targets ALL focused elements aggressively */
+        /* **FIX 2 - AGGRESSIVE FOCUS REMOVAL 1 (Universal)** */
         *:focus {
             outline: none !important; 
             box-shadow: none !important; 
             -webkit-box-shadow: none !important;
-            border-color: #555 !important; /* Keep a neutral border */
+        }
+        
+        /* **FIX 2 - AGGRESSIVE FOCUS REMOVAL 2 (Targeted Input Border)** */
+        input:focus {
+            border-color: #444 !important; /* Force border to stay dark on focus */
         }
 
         button {
@@ -333,11 +336,7 @@
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.7);
             position: relative; /* For modal autocomplete */
         }
-        .modal-content input:focus { /* Reinforce focus removal inside modal */
-            outline: none !important;
-            box-shadow: none !important;
-            border-color: #555 !important;
-        }
+        
         #search-results img {
             max-width: 100%;
             height: auto;
@@ -356,7 +355,7 @@
             border: 3px solid #2980b9;
             border-radius: 8px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
-            z-index: 99; /* Below the modal */
+            z-index: 999; /* Increased Z-Index to ensure visibility */
             display: none; 
         }
         #lobby-card-preview img {
@@ -1274,20 +1273,24 @@
                     });
                 });
                 
-                // FINAL FIX: Lobby Commander Hover Preview
+                // **FIX 1 - Hover Listener with Redundant Checks and Logging**
                 listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan => {
                     const imageUrl = cmdSpan.dataset.imgUrl;
 
                     cmdSpan.addEventListener('mouseenter', () => {
-                        if (imageUrl) {
+                        if (imageUrl && previewCard && previewImg) {
                             previewImg.src = imageUrl;
                             previewCard.style.display = 'block';
+                            // console.log('Hover active for:', cmdSpan.textContent, 'Image:', imageUrl); // Debugging
                         }
                     });
 
                     cmdSpan.addEventListener('mouseleave', () => {
-                        previewCard.style.display = 'none';
-                        previewImg.src = ''; 
+                        if (previewCard) {
+                            previewCard.style.display = 'none';
+                            previewImg.src = ''; 
+                            // console.log('Hover inactive'); // Debugging
+                        }
                     });
                 });
             }
