@@ -227,7 +227,7 @@
         /* --- Modal for Card Search --- */
         .modal-content {
             background-color: #333; /* Modal background */
-            color: #f0f0f0;
+            color: #f0f0f0; /* Ensure default text is light */
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.7);
         }
         
@@ -952,6 +952,7 @@
         document.getElementById('modal-search-btn').addEventListener('click', async () => {
             const cardName = document.getElementById('modal-card-name').value.trim();
             const resultsDiv = document.getElementById('search-results');
+            // Set initial searching message color
             resultsDiv.innerHTML = '<p style="color:#f0f0f0;">Searching...</p>';
 
             if (!cardName) {
@@ -966,6 +967,7 @@
                 if (response.ok) {
                     const imgUrl = data.image_uris?.normal || data.card_faces?.[0]?.image_uris?.normal;
                     if (imgUrl) {
+                        // Success message with card name
                         resultsDiv.innerHTML = `
                             <h4 style="color:#f0f0f0;">${data.name}</h4>
                             <img src="${imgUrl}" alt="${data.name}">
@@ -974,6 +976,7 @@
                         resultsDiv.innerHTML = '<p style="color:#f0f0f0;">Card found, but image unavailable.</p>';
                     }
                 } else {
+                    // Error/Not found message
                     resultsDiv.innerHTML = `<p style="color:#f0f0f0;">Card not found. Check spelling.</p>`;
                 }
             } catch (e) {
