@@ -391,7 +391,6 @@
         }
 
         function navigateTo(page) {
-            // update hash without triggering reload
             if (location.hash !== `#${page}`) history.pushState(null, '', `#${page}`);
             setActiveNav(page);
             if (page === 'home') renderHome();
@@ -415,7 +414,6 @@
 
         // --- Page: Home (keeps your existing setup view) ---
         async function renderHome() {
-            // Reuse renderSetupView logic but expose as renderHome
             await renderSetupView();
         }
 
@@ -444,57 +442,36 @@
             appContainer.innerHTML = html;
         }
 
-        // --- Page: Contact (stores message to Firestore and opens mailto fallback) ---
+        // --- Page: Contact (EMAIL ONLY) ---
         function renderContact() {
             const appContainer = document.getElementById('app-container');
             appContainer.innerHTML = `
                 <h2 style="margin-top:0; color:var(--text);">Contact</h2>
-                <p class="muted">Send a message — it will be saved to the app database and you can also open your email client.</p>
+                <p class="muted">To contact me, please use your email client. Click the button below to open a new message addressed to <strong>CardboardBonfire@gmail.com</strong>.</p>
                 <div style="max-width:640px;">
-                    <input type="text" id="contact-name" placeholder="Your name">
-                    <input type="email" id="contact-email" placeholder="Your email (optional)">
-                    <textarea id="contact-message" placeholder="Your message"></textarea>
-                    <div class="row">
-                        <button id="contact-send" class="btn-primary">Send Message</button>
-                        <button id="contact-mailto" class="btn-secondary">Open Email Client</button>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <button id="contact-mailto" class="btn-primary">Email CardboardBonfire@gmail.com</button>
+                        <button id="contact-copy" class="btn-secondary">Copy Email</button>
                     </div>
                     <p id="contact-status" class="muted" style="margin-top:8px;"></p>
                 </div>
             `;
 
-            document.getElementById('contact-send').addEventListener('click', async () => {
-                const name = document.getElementById('contact-name').value.trim();
-                const email = document.getElementById('contact-email').value.trim();
-                const message = document.getElementById('contact-message').value.trim();
-                const status = document.getElementById('contact-status');
-
-                if (!name || !message) {
-                    status.textContent = "Please include your name and a message.";
-                    return;
-                }
-
-                status.textContent = "Saving message...";
-                try {
-                    const contactsRef = collection(db, 'contacts');
-                    // Use setDoc with generated id via serverTimestamp to avoid collisions
-                    await setDoc(doc(contactsRef, `${Date.now()}_${Math.random().toString(36).slice(2,8)}`), {
-                        name, email, message, createdAt: serverTimestamp()
-                    });
-                    status.textContent = "Message saved. Thank you!";
-                    document.getElementById('contact-name').value = '';
-                    document.getElementById('contact-email').value = '';
-                    document.getElementById('contact-message').value = '';
-                } catch (e) {
-                    console.error("Contact save failed:", e);
-                    status.textContent = "Failed to save message. You can open your email client instead.";
-                }
-            });
-
             document.getElementById('contact-mailto').addEventListener('click', () => {
                 const subject = encodeURIComponent("Contact from MTG Life Tracker");
                 const body = encodeURIComponent("Hi,\n\nI'd like to get in touch regarding...");
-                // Updated mailto to use the user's requested email
                 window.location.href = `mailto:CardboardBonfire@gmail.com?subject=${subject}&body=${body}`;
+            });
+
+            document.getElementById('contact-copy').addEventListener('click', async () => {
+                const status = document.getElementById('contact-status');
+                try {
+                    await navigator.clipboard.writeText('CardboardBonfire@gmail.com');
+                    status.textContent = 'Email address copied to clipboard.';
+                } catch (e) {
+                    console.error('Copy failed', e);
+                    status.textContent = 'Unable to copy automatically — please select and copy: CardboardBonfire@gmail.com';
+                }
             });
         }
 
@@ -593,6 +570,7 @@
                             previewCardEl.style.display = 'block';
                         }
                     });
+
                     cmdSpan.addEventListener('mouseleave', () => {
                         if (previewCardEl) {
                             previewCardEl.style.display = 'none';
@@ -1163,7 +1141,6 @@
         // 8. INIT: Auth + initial route
         // ----------------------------------------------------------------------
         function initialRoute() {
-            // If URL has roomID param, open join flow; otherwise route by hash
             const params = new URLSearchParams(window.location.search);
             const idFromURL = params.get('roomID');
             if (idFromURL) {
