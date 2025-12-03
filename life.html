@@ -38,11 +38,11 @@
             color: #f0f0f0; /* Light input text */
         }
         
-        /* NEW: Fixes for the blue line issue */
+        /* FIX: Removes the blue line/outline on input focus */
         input:focus {
-            outline: none; /* Removes default blue focus outline */
-            border-color: #555; /* Keeps a subtle border on focus */
-            box-shadow: none; /* Ensures no glow */
+            outline: none; 
+            border-color: #555; 
+            box-shadow: none !important; /* Use !important to override browser default styles */
         }
 
         button {
@@ -235,7 +235,6 @@
             z-index: 100; 
             border-radius: 0 0 6px 6px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.5);
-            /* NEW: Adjust margin-top to butt up against the input */
             margin-top: -10px; 
         }
         .suggestion-item {
@@ -402,7 +401,8 @@
     <div id="card-search-modal" class="modal">
         <div class="modal-content">
             <h3>Card Search (Scryfall)</h3>
-            <input type="text" id="modal-card-name" placeholder="Enter card name" autocomplete="off"> <div id="modal-suggestions-list" class="suggestions-list"></div>
+            <input type="text" id="modal-card-name" placeholder="Enter card name" autocomplete="off"> 
+            <div id="modal-suggestions-list" class="suggestions-list"></div>
             <button id="modal-search-btn" class="btn-primary">Search</button>
             <div id="search-results"></div>
             <button id="modal-close-btn" class="btn-danger">Close</button>
@@ -425,7 +425,6 @@
         const SCRYFALL_AUTOCOMPLETE_API = "https://api.scryfall.com/cards/autocomplete?q=";
         const TIMEOUT_MINUTES = 25; 
         const DELETE_ALL_PWD = "DeleteAllRooms"; 
-        // NEW: Reduced debounce time
         const AUTOCOMPLETE_DEBOUNCE_MS = 100;
         
         // ----------------------------------------------------------------------
@@ -529,7 +528,6 @@
                         item.onclick = () => {
                             inputField.value = suggestion;
                             suggestionsList.innerHTML = ''; // Clear suggestions after selection
-                            // inputField.focus(); // Removed focus to prevent browser issues after autofill
                         };
                         suggestionsList.appendChild(item);
                     });
@@ -1029,7 +1027,9 @@
             appContainer.innerHTML = `
                 <h2 style="color:#f0f0f0;">${title}</h2>
                 <input type="text" id="player-name-input" placeholder="Your Player Name">
-                <input type="text" id="commander-input" placeholder="Your Commander's Name (Required)" autocomplete="off"> <div id="suggestions-list" class="suggestions-list"></div> <input type="password" id="pwd-input" placeholder="Room Password">
+                <input type="text" id="commander-input" placeholder="Your Commander's Name (Required)" autocomplete="off"> 
+                <div id="suggestions-list" class="suggestions-list"></div>
+                <input type="password" id="pwd-input" placeholder="Room Password">
                 <button id="action-btn" class="btn-primary">${btnText}</button>
                 <button id="cancel-btn" class="btn-danger">Cancel</button> 
                 <p id="err-msg" style="color:#ff5555;"></p>
@@ -1045,7 +1045,6 @@
                 
                 if (query.length >= 2) {
                     autocompleteTimeout = setTimeout(() => {
-                        // NEW: Using AUTOCOMPLETE_DEBOUNCE_MS (100ms)
                         fetchAutocompleteSuggestions(query, 'suggestions-list', 'commander-input');
                     }, AUTOCOMPLETE_DEBOUNCE_MS); 
                 } else {
@@ -1317,7 +1316,6 @@
             
             if (query.length >= 2) {
                 modalAutocompleteTimeout = setTimeout(() => {
-                    // NEW: Using AUTOCOMPLETE_DEBOUNCE_MS (100ms)
                     fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name');
                 }, AUTOCOMPLETE_DEBOUNCE_MS); 
             } else {
