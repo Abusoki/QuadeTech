@@ -11,7 +11,7 @@
             flex-direction: column;
             align-items: center;
             padding: 20px;
-            background-color: #1C1E3B;
+            background-color: #f0f2f5;
             color: #333;
         }
         #app-container {
@@ -214,9 +214,9 @@
             margin-top: 15px;
         }
         
-        /* NEW: Global delete button style */
+        /* Global delete button style */
         #delete-all-rooms-btn {
-            background-color: #c0392b; /* Darker red for emphasis */
+            background-color: #c0392b; 
             color: white;
             padding: 10px 15px;
             margin-top: 20px;
@@ -257,7 +257,7 @@
         };
         const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
         const TIMEOUT_MINUTES = 25; 
-        const DELETE_ALL_PWD = "DeleteAllRooms"; // NEW: Global delete password
+        const DELETE_ALL_PWD = "DeleteAllRooms"; 
         
         // ----------------------------------------------------------------------
         // 2. IMPORTS
@@ -438,7 +438,7 @@
                     <div id="roll-result" style="width:40%; text-align:center;">-</div>
                     <button id="turn-order-btn">Determine Turn Order</button>
                     <button id="card-search-btn">Card Search</button>
-                </div>
+                    <button id="share-invite-btn">Share Invite Link</button> </div>
                 <button id="leave-room-btn" class="btn-danger">Leave Room</button>
             `;
 
@@ -468,6 +468,19 @@
                 if (message) {
                     sendChatMessage(message, currentPlayerName);
                     input.value = '';
+                }
+            });
+            
+            // NEW: Share Invite Link Listener
+            document.getElementById('share-invite-btn').addEventListener('click', () => {
+                const roomUrl = `${window.location.origin}${window.location.pathname}?roomID=${roomId}`;
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(roomUrl)
+                        .then(() => alert(`Invite link copied to clipboard: ${roomUrl}`))
+                        .catch(err => console.error('Could not copy text: ', err));
+                } else {
+                    prompt(`Invite link (Copy Manually):`, roomUrl);
                 }
             });
 
@@ -580,7 +593,6 @@
 
         // --- SETUP & LIST VIEWS ---
         
-        // NEW: Function to delete all rooms in the collection
         async function deleteAllRooms() {
             const password = prompt("Enter the global deletion password to confirm this action:");
             
@@ -606,7 +618,7 @@
                 }
 
                 alert(`Success! Deleted ${deleteCount} room(s).`);
-                renderSetupView(); // Refresh the view
+                renderSetupView(); 
             } catch (e) {
                 console.error("Failed to delete all rooms:", e);
                 alert("An error occurred during bulk deletion. Check the console.");
@@ -658,7 +670,11 @@
                 <p id="err-msg" style="color:red"></p>
             `;
             
-            document.getElementById("cancel-btn").onclick = renderSetupView;
+            document.getElementById("cancel-btn").onclick = () => {
+                // Clear URL param on cancel
+                window.history.pushState({}, document.title, window.location.pathname);
+                renderSetupView();
+            };
             
             document.getElementById("action-btn").onclick = async () => {
                 const name = document.getElementById("player-name-input").value.trim();
@@ -748,7 +764,7 @@
             roomId = null;
 
             statusMessage.textContent = "Browse rooms or create a new one.";
-            statusMessage.style.color = "#555";
+            statusMessage.style.color = "#555"; // Set color of status message
 
             let listHtml = '<p>Loading active rooms...</p>';
             appContainer.innerHTML = `
@@ -759,7 +775,8 @@
                 </div>
                 <h3>Active Rooms</h3>
                 <div id="room-list-container">${listHtml}</div>
-                <button id="delete-all-rooms-btn">Delete All Rooms (Admin)</button> `;
+                <button id="delete-all-rooms-btn">Delete All Rooms (Admin)</button> 
+            `;
 
             try {
                 const q = query(collection(db, ROOM_COLLECTION), limit(15));
@@ -816,7 +833,6 @@
                 }
             };
             
-            // NEW: Listener for the global delete button
             document.getElementById("delete-all-rooms-btn").addEventListener('click', deleteAllRooms);
         }
 
@@ -861,10 +877,25 @@
         // ----------------------------------------------------------------------
         // 6. INIT
         // ----------------------------------------------------------------------
+
+        // NEW: Checks for roomID parameter in URL
+        function checkURLParamsAndInitialize() {
+            const params = new URLSearchParams(window.location.search);
+            const idFromURL = params.get('roomID');
+
+            if (idFromURL) {
+                // If a roomID exists in the URL, go straight to the password prompt
+                promptPassword(idFromURL, 'join');
+            } else {
+                // Otherwise, show the normal lobby
+                renderSetupView();
+            }
+        }
+
         onAuthStateChanged(auth, user => {
             if(user) {
                 userId = user.uid;
-                renderSetupView();
+                checkURLParamsAndInitialize(); // Call new function to start
             } else {
                 signInAnonymously(auth).catch(e => {
                     document.getElementById("status-message").textContent = "Auth Error: " + e.message;
