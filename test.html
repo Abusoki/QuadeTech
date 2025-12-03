@@ -47,7 +47,13 @@
     .player-name{font-weight:800;font-size:1rem;color:var(--text)}
     .player-sub{font-size:.85rem;color:var(--muted)}
     .life-big{font-size:3.2rem;font-weight:900;color:var(--text);letter-spacing:-1px}
-    .life-edit{width:110px;padding:10px;border-radius:8px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center;font-weight:800;margin-top:6px}
+    /* Unified single life input that looks like the big life display */
+    .life-input {
+      font-size:3.2rem;font-weight:900;color:var(--text);letter-spacing:-1px;
+      background:transparent;border:1px solid transparent;padding:6px 10px;border-radius:8px;text-align:center;
+      width:120px;
+    }
+    .life-input:focus{border-color:rgba(255,255,255,0.04);box-shadow:0 0 0 4px rgba(41,128,185,0.04);outline:none}
     .controls{display:flex;gap:8px;flex-wrap:wrap}
     .control-btn{padding:8px 12px;border-radius:8px;font-weight:800;min-width:56px;text-align:center;background:linear-gradient(180deg,#2b2b2b,#232323);color:var(--text);border:1px solid rgba(255,255,255,0.03);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
     .control-btn.positive{background:linear-gradient(180deg,#2ecc71,#27ae60);color:#04260a}
@@ -77,8 +83,8 @@
     #chat-card-preview img{display:block;width:100%;border-radius:6px}
     #chat-card-preview .card-title{margin-top:8px;font-weight:800;color:var(--text);text-align:center}
     .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);display:none;justify-content:center;align-items:center;z-index:2000;padding:16px}
-    .modal-content{background:#16181a;color:var(--text);padding:20px;border-radius:10px;width:100%;max-width:520px;box-shadow:0 12px 40px rgba(0,0,0,.7);position:relative}
-    .suggestions-list{position:absolute;width:100%;background:var(--input-bg);border:1px solid var(--dark-border);border-top:none;max-height:150px;overflow-y:auto;z-index:100;border-radius:0 0 8px 8px;box-shadow:0 6px 18px rgba(0,0,0,.6);margin-top:-10px}
+    .modal-content{background:#16181a;color:var(--text);padding:20px;border-radius:10px;width:100%;max-width:520px;box-shadow:0 12px 40px rgba(0,0,0,0.7);position:relative}
+    .suggestions-list{position:absolute;width:100%;background:var(--input-bg);border:1px solid var(--dark-border);border-top:none;max-height:150px;overflow-y:auto;z-index:100;border-radius:0 0 8px 8px;box-shadow:0 6px 18px rgba(0,0,0,0.6);margin-top:-10px}
     .suggestions-list:empty{display:none!important;border:none!important;box-shadow:none!important;margin-top:0!important}
     .suggestion-item{padding:8px 12px;cursor:pointer;color:var(--text)}
     .suggestion-item:hover{background:rgba(41,128,185,.08)}
@@ -102,6 +108,7 @@
       .player-panel div[style*="min-width:220px"]{min-width:0!important;width:100%!important}
       #app-container{padding:14px}
       body{padding:14px}
+      .life-input{width:100%;max-width:220px}
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -564,7 +571,6 @@
         `;
 
         const outgoingTotal = computeOutgoingTotal(roomData, playerId);
-        const incomingTotal = computeIncomingCmdDamage(roomData, playerId);
         let outgoingBreakdownHtml = '';
         if(isMe){
           const outgoing = computeOutgoingCmdDamage(roomData, playerId);
@@ -605,15 +611,10 @@
           `;
         }
 
-        // Life display + editable input for YOU
-        const lifeDisplayHtml = isMe
-          ? `
-              <div class="life-big" id="life-display-${playerId}">${life}</div>
-              <input type="number" inputmode="numeric" pattern="[0-9]*" class="life-edit" id="life-edit-${playerId}" value="${life}" min="0">
-            `
-          : `
-              <div class="life-big" id="life-display-${playerId}">${life}</div>
-            `;
+        // Single unified life box: input for YOU, static display for others
+        const lifeHtml = isMe
+          ? `<input type="number" id="life-input-${playerId}" class="life-input" value="${life}" min="0" inputmode="numeric" pattern="[0-9]*">`
+          : `<div class="life-big" id="life-display-${playerId}">${life}</div>`;
 
         html += `
           <div class="player-panel${isEliminated ? ' player-eliminated' : ''}" data-player-id="${playerId}">
@@ -630,7 +631,7 @@
 
             <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
               <div>
-                ${lifeDisplayHtml}
+                ${lifeHtml}
 
                 <div style="margin-top:8px">
                   <div class="cmd-block">
@@ -707,6 +708,7 @@
         if(controls){ if(openCmdControls.has(pid)) controls.classList.add('open'); else controls.classList.remove('open'); }
       });
 
+      // Attach control button handlers
       document.querySelectorAll('.control-btn').forEach(btn=>{
         btn.addEventListener('click', async ()=>{
           if (btn.disabled) return;
@@ -715,22 +717,33 @@
           const delta = parseInt(btn.dataset.delta || '0');
 
           if(action === 'life'){
+            // optimistic update: update the unified life input/display immediately for YOU
             if (targetPlayer === userId) {
-              const lifeEl = document.getElementById(`life-display-${targetPlayer}`);
-              const inputEl = document.getElementById(`life-edit-${targetPlayer}`);
-              if (lifeEl) {
-                const current = parseInt(lifeEl.textContent || '0');
-                const next = current + delta;
-                lifeEl.textContent = next;
-                if (inputEl) inputEl.value = next;
-                const panel = lifeEl.closest('.player-panel');
+              const lifeInput = document.getElementById(`life-input-${targetPlayer}`);
+              if (lifeInput) {
+                const current = parseInt(lifeInput.value || '0');
+                const next = Math.max(0, current + delta);
+                lifeInput.value = next;
+                // apply fade immediately if threshold reached
+                const panel = lifeInput.closest('.player-panel');
                 if (panel) {
-                  const eliminatedNow = (next <= 0);
-                  if (eliminatedNow) panel.classList.add('player-eliminated');
-                  else panel.classList.remove('player-eliminated');
+                  if (next <= 0) panel.classList.add('player-eliminated'); else panel.classList.remove('player-eliminated');
+                }
+              }
+            } else {
+              // for other players, update their static display optimistically if present
+              const lifeDisplay = document.getElementById(`life-display-${targetPlayer}`);
+              if (lifeDisplay) {
+                const current = parseInt(lifeDisplay.textContent || '0');
+                const next = Math.max(0, current + delta);
+                lifeDisplay.textContent = next;
+                const panel = lifeDisplay.closest('.player-panel');
+                if (panel) {
+                  if (next <= 0) panel.classList.add('player-eliminated'); else panel.classList.remove('player-eliminated');
                 }
               }
             }
+            // send update to server
             updateLifeForPlayer(targetPlayer, delta);
           }
           else if(action === 'cmd-toggle'){
@@ -766,30 +779,27 @@
         });
       });
 
-      // direct life input: YOU only
-      const lifeEdit = document.getElementById(`life-edit-${userId}`);
-      if (lifeEdit) {
-        const applyLifeInput = async () => {
-          let val = parseInt(lifeEdit.value);
+      // Unified life input handlers (YOU only)
+      const myLifeInput = document.getElementById(`life-input-${userId}`);
+      if (myLifeInput) {
+        const applyLifeValue = async () => {
+          let val = parseInt(myLifeInput.value);
           if (isNaN(val)) return;
           val = Math.max(0, val);
-          const lifeEl = document.getElementById(`life-display-${userId}`);
-          if (lifeEl) {
-            lifeEl.textContent = val;
-            const panel = lifeEl.closest('.player-panel');
-            if (panel) {
-              if (val <= 0) panel.classList.add('player-eliminated');
-              else panel.classList.remove('player-eliminated');
-            }
+          // optimistic UI already shows the value; ensure panel fade state
+          const panel = myLifeInput.closest('.player-panel');
+          if (panel) {
+            if (val <= 0) panel.classList.add('player-eliminated'); else panel.classList.remove('player-eliminated');
           }
           await setLifeForPlayerDirect(userId, val);
         };
-        lifeEdit.addEventListener('keydown', (e)=>{
-          if(e.key === 'Enter'){ e.preventDefault(); applyLifeInput(); }
+        myLifeInput.addEventListener('keydown', (e)=>{
+          if (e.key === 'Enter'){ e.preventDefault(); applyLifeValue(); myLifeInput.blur(); }
         });
-        lifeEdit.addEventListener('blur', applyLifeInput);
+        myLifeInput.addEventListener('blur', applyLifeValue);
       }
 
+      // cmd-target inputs
       document.querySelectorAll('.cmd-target-input').forEach(input => {
         input.addEventListener('change', async () => {
           if (input.disabled) return;
@@ -800,6 +810,7 @@
         });
       });
 
+      // chat submit
       const chatForm = document.getElementById('chat-input-form');
       if(chatForm){
         chatForm.addEventListener('submit', (e)=>{
@@ -810,6 +821,7 @@
         });
       }
 
+      // roll button
       const rollBtnTop = document.getElementById('roll-d20-btn-top');
       const rollResultTop = document.getElementById('roll-result-top');
       if(rollBtnTop){
@@ -819,6 +831,7 @@
         });
       }
 
+      // card search modal wiring
       document.getElementById('card-search-btn').addEventListener('click', ()=>{
         const modal = document.getElementById('card-search-modal'); modal.style.display = 'flex'; modal.setAttribute('aria-hidden','false'); document.getElementById('modal-card-name').value = ''; document.getElementById('search-results').innerHTML = '';
       });
@@ -871,6 +884,7 @@
       catch(e){ console.error("Error posting system card to chat:", e); }
     }
 
+    // Incremental life update (buttons) - only allowed for YOU
     async function updateLifeForPlayer(targetPlayerId, delta){
       if(!roomId || !userId) return;
       if(targetPlayerId !== userId) return;
@@ -888,7 +902,7 @@
       }catch(e){ console.error("Error updating life for player:", e); }
     }
 
-    // direct set life (from input)
+    // Direct set life (from unified input)
     async function setLifeForPlayerDirect(targetPlayerId, newLife){
       if(!roomId || !userId) return;
       if(targetPlayerId !== userId) return;
@@ -1165,77 +1179,4 @@
       const password = prompt("Enter the global deletion password to confirm this action:");
       if(password !== DELETE_ALL_PWD){ alert("Incorrect password. All rooms were NOT deleted."); return; }
       if(!confirm("LAST WARNING: Are you absolutely sure you want to delete ALL rooms? This cannot be undone?")) return;
-      document.getElementById("status-message").textContent = "Deleting all rooms...";
-      const roomsRef = collection(db, ROOM_COLLECTION);
-      try{
-        const snapshot = await getDocs(roomsRef);
-        let deleteCount = 0;
-        for(const docSnapshot of snapshot.docs){ await deleteDoc(doc(db, ROOM_COLLECTION, docSnapshot.id)); deleteCount++; }
-        alert(`Success! Deleted ${deleteCount} room(s).`);
-        renderSetupView();
-      }catch(e){ console.error("Failed to delete all rooms:", e); alert("An error occurred during bulk deletion. Check the console."); }
-    }
-
-    async function deleteRoom(id){
-      if(!id) return;
-      try{ await deleteDoc(doc(db, ROOM_COLLECTION, id)); if(unsubscribe) unsubscribe(); roomId = null; renderSetupView(); }
-      catch(e){ alert("Failed to delete room. Check console for details."); console.error("Delete room failed:", e); }
-    }
-
-    // ----------------------------------------------------------------------
-    // CARD SEARCH MODAL
-    // ----------------------------------------------------------------------
-    const modalCardNameInput = document.getElementById('modal-card-name');
-    const modalSuggestionsList = document.getElementById('modal-suggestions-list');
-    let modalAutocompleteTimeout = null;
-    document.getElementById('modal-close-btn').addEventListener('click', ()=>{ const modal = document.getElementById('card-search-modal'); modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); });
-    modalCardNameInput.addEventListener('input', ()=>{
-      const query = modalCardNameInput.value.trim();
-      if(modalAutocompleteTimeout) clearTimeout(modalAutocompleteTimeout);
-      if(query.length >= 2) modalAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name'), AUTOCOMPLETE_DEBOUNCE_MS);
-      else modalSuggestionsList.innerHTML = '';
-    });
-    document.getElementById('modal-search-btn').addEventListener('click', async ()=>{
-      modalSuggestionsList.innerHTML = '';
-      const cardName = modalCardNameInput.value.trim();
-      const resultsDiv = document.getElementById('search-results');
-      resultsDiv.innerHTML = '<p style="color:var(--text)">Searching...</p>';
-      if(!cardName){ resultsDiv.innerHTML = '<p style="color:var(--text)">Please enter a card name.</p>'; return; }
-      try{
-        const result = await validateCommander(cardName);
-        if(result){
-          resultsDiv.innerHTML = `<h4 style="color:var(--text);margin:6px 0 8px 0">${result.validatedName}</h4><img src="${result.imageUrl}" alt="${result.validatedName}" style="max-width:100%;border-radius:6px">`;
-          await postSystemCardToChat(result.validatedName, result.imageUrl);
-          setTimeout(()=>{ const modal = document.getElementById('card-search-modal'); modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); }, 600);
-        } else { resultsDiv.innerHTML = `<p style="color:var(--text)">Card not found. Check spelling.</p>`; }
-      }catch(e){ resultsDiv.innerHTML = `<p style="color:var(--text)">Error connecting to Scryfall.</p>`; console.error(e); }
-    });
-
-    // ----------------------------------------------------------------------
-    // INIT
-    // ----------------------------------------------------------------------
-    function initialRoute(){
-      const params = new URLSearchParams(window.location.search);
-      const idFromURL = params.get('roomID');
-      const persistedRoom = localStorage.getItem('currentRoomId');
-
-      if(idFromURL){ promptPassword(idFromURL,'join'); setActiveNav('home'); return; }
-
-      if(persistedRoom){ listenToRoom(persistedRoom); setActiveNav('home'); return; }
-
-      const page = (location.hash || '#home').replace('#','') || 'home';
-      setActiveNav(page);
-      if(page === 'home') renderHome();
-      else if(page === 'changes') renderChanges();
-      else if(page === 'contact') renderContact();
-    }
-
-    onAuthStateChanged(auth, user=>{
-      if(user){ userId = user.uid; initialRoute(); }
-      else{ signInAnonymously(auth).catch(e=>{ document.getElementById("status-message").textContent = "Auth Error: " + e.message; }); }
-    });
-
-    window.restartGame = restartGame;
-  </script>
-</body>
-</html>
+      document.getElementById("status-message").text
