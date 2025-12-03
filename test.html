@@ -1,1412 +1,1033 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>MTG Life Tracker</title>
-    <style>
-        /* --- THEME VARIABLES --- */
-        :root{
-            --bg:#0f1113;
-            --card:#16181a;
-            --muted:#9aa3ad;
-            --text:#e6eef6;
-            --accent:#2980b9;
-            --accent-strong:#1f6fa8;
-            --green:#27ae60;
-            --red:#c0392b;
-            --dark-border:#22272a;
-            --input-bg:#1f2326;
-        }
-
-        html,body{height:100%;margin:0}
-        body{
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            background:var(--bg);
-            color:var(--text);
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            padding:20px;
-            box-sizing:border-box;
-            min-height:100vh;
-        }
-
-        /* --- Header / Nav --- */
-        header.app-header{
-            width:100%;
-            max-width:1100px;
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            margin-bottom:18px;
-            gap:12px;
-        }
-        .brand{display:flex;flex-direction:column;gap:2px}
-        .app-title{margin:0;font-size:1.25rem;color:var(--text)}
-        .app-subtitle{margin:0;font-size:0.8rem;color:var(--muted);font-style:italic}
-        nav.site-nav{display:flex;gap:8px}
-        nav.site-nav button{
-            background:transparent;color:var(--text);border:1px solid transparent;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;
-        }
-        nav.site-nav button.active{background:rgba(41,128,185,0.10);border-color:var(--accent)}
-
-        /* --- App container --- */
-        #app-container{
-            width:100%;
-            max-width:1100px;
-            background:var(--card);
-            padding:20px;
-            border-radius:12px;
-            box-shadow:0 6px 30px rgba(0,0,0,0.6);
-            box-sizing:border-box;
-            position:relative;
-        }
-
-        /* --- Inputs / Buttons --- */
-        input,textarea,select{
-            width:100%;padding:12px;margin-bottom:10px;border-radius:8px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);box-sizing:border-box;
-        }
-        textarea{min-height:120px;resize:vertical}
-        input,button,textarea,select{-webkit-appearance:none;appearance:none;-webkit-tap-highlight-color:transparent}
-        *:focus,*:focus-visible,*:focus-within{outline:none!important;box-shadow:none!important}
-        button{cursor:pointer;border-radius:8px;padding:10px 12px;border:none;font-weight:700;transition:transform .08s ease,opacity .12s}
-        button:active,.tapped{transform:scale(.96)}
-        .btn-primary{background:linear-gradient(180deg,var(--green),#1f8a4a);color:#fff}
-        .btn-danger{background:linear-gradient(180deg,var(--red),#9b2b24);color:#fff}
-        .btn-secondary{background:linear-gradient(180deg,#3a3a3a,#2f2f2f);color:#fff}
-
-        /* disabled styling */
-        button:disabled, input:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.2); }
-
-        /* --- Player grid / panels --- */
-        .player-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:12px}
-        @media(max-width:900px){.player-grid{grid-template-columns:1fr}}
-        .player-panel{
-            background:linear-gradient(180deg,rgba(255,255,255,0.01),rgba(255,255,255,0.00));
-            border:1px solid var(--dark-border);
-            border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;
-            box-shadow:0 6px 18px rgba(0,0,0,0.6);
-        }
-        .player-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
-        .player-name{font-weight:800;font-size:1rem;color:var(--text)}
-        .player-sub{font-size:.85rem;color:var(--muted)}
-        .life-big{font-size:3.2rem;font-weight:900;color:var(--text);letter-spacing:-1px}
-        .controls{display:flex;gap:8px;flex-wrap:wrap}
-        .control-btn{padding:8px 12px;border-radius:8px;font-weight:800;min-width:56px;text-align:center;background:linear-gradient(180deg,#2b2b2b,#232323);color:var(--text);border:1px solid rgba(255,255,255,0.03);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
-        .control-btn.positive{background:linear-gradient(180deg,#2ecc71,#27ae60);color:#04260a}
-        .control-btn.negative{background:linear-gradient(180deg,#ff6b6b,#c0392b);color:#2b0706}
-        .cmd-block{display:flex;justify-content:space-between;align-items:center;gap:8px;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.02)}
-        .cmd-label{font-size:.9rem;color:var(--muted)}
-        .cmd-value{font-weight:800;color:#ffb3b3}
-        .you-badge{background:linear-gradient(90deg,var(--accent),var(--accent-strong));color:#fff;padding:6px 8px;border-radius:999px;font-weight:800;font-size:.8rem}
-
-        /* --- CMD controls persistent area --- */
-        .cmd-controls{display:none;margin-top:10px}
-        .cmd-controls.open{display:block}
-
-        /* --- Per-opponent CMD display (static, fixed rows) --- */
-        .per-opp-container{
-            margin-top:10px;
-            display:flex;
-            flex-direction:column;
-            gap:6px;
-            max-height:160px;
-            overflow:auto;
-            border-top:1px solid rgba(255,255,255,0.02);
-            padding-top:8px;
-        }
-        .per-opp-row{
-            height:44px; /* fixed height so rows don't shift */
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            gap:8px;
-            padding:6px 8px;
-            border-radius:8px;
-            background:rgba(255,255,255,0.01);
-            border:1px solid rgba(255,255,255,0.02);
-            box-sizing:border-box;
-        }
-        .per-opp-left{font-size:0.9em;color:var(--muted);font-weight:700}
-        .per-opp-controls{display:flex;align-items:center;gap:8px}
-
-        /* --- Outgoing CMD summary (for your panel) --- */
-        .outgoing-cmd-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
-        .outgoing-cmd-item{font-size:0.95rem;color:var(--text);display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02)}
-
-        /* --- Infect small tracker --- */
-        .infect-block{margin-top:8px;display:flex;align-items:center;gap:8px}
-        .infect-label{font-size:0.85rem;color:var(--muted)}
-        .infect-value{font-weight:800;color:#bfe6a8;min-width:36px;text-align:center}
-
-        /* small button style (for infect +/- and compact cmd +/-) */
-        .small-btn{
-            padding:6px 8px;
-            font-size:0.85rem;
-            min-width:36px;
-            border-radius:6px;
-        }
-
-        /* --- Chat area --- */
-        #chat-log{height:150px;overflow-y:auto;border:1px solid rgba(255,255,255,0.03);padding:10px;margin-bottom:10px;border-radius:8px;background:#0f1113;font-size:.9em}
-        .chat-message{margin-bottom:6px;display:flex;gap:8px;align-items:center}
-        .chat-sender{font-weight:800;color:#74b9ff;margin-right:6px}
-        .chat-sender.system{color:#ffd166;font-weight:900}
-        .chat-card{display:inline-block;position:relative;cursor:pointer;color:var(--text);text-decoration:underline dotted rgba(255,255,255,0.08)}
-        .chat-card .card-tooltip{display:none} /* we use right preview instead */
-
-        /* --- Chat card preview on right (fixed) --- */
-        #chat-card-preview{
-            position:fixed;
-            top:50%;
-            right:20px;
-            transform:translateY(-50%);
-            width:300px;
-            max-width:40vw;
-            border:3px solid var(--accent);
-            border-radius:10px;
-            box-shadow:0 12px 40px rgba(0,0,0,0.7);
-            background:#0b0d0f;
-            z-index:1500;
-            display:none;
-            padding:8px;
-        }
-        #chat-card-preview img{display:block;width:100%;border-radius:6px}
-        #chat-card-preview .card-title{margin-top:8px;font-weight:800;color:var(--text);text-align:center}
-
-        /* --- Modal (centered overlay) --- */
-        .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);display:none;justify-content:center;align-items:center;z-index:2000}
-        .modal-content{background:#16181a;color:var(--text);padding:20px;border-radius:10px;width:92%;max-width:520px;box-shadow:0 12px 40px rgba(0,0,0,.7);position:relative}
-
-        /* --- Suggestions list --- */
-        .suggestions-list{position:absolute;width:100%;background:var(--input-bg);border:1px solid var(--dark-border);border-top:none;max-height:150px;overflow-y:auto;z-index:100;border-radius:0 0 8px 8px;box-shadow:0 6px 18px rgba(0,0,0,.6);margin-top:-10px}
-        .suggestions-list:empty{display:none!important;border:none!important;box-shadow:none!important;margin-top:0!important}
-        .suggestion-item{padding:8px 12px;cursor:pointer;color:var(--text)}
-        .suggestion-item:hover{background:rgba(41,128,185,.08)}
-
-        /* --- Lobby preview left --- */
-        #lobby-card-preview{position:fixed;top:50%;left:20px;transform:translateY(-50%);width:260px;border:3px solid var(--accent);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.8);z-index:999;display:none;background:#0b0d0f}
-        #lobby-card-preview img{display:block;width:100%;border-radius:6px}
-
-        /* --- Footer / helpers --- */
-        #lobby-features{margin-top:18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-        #room-footer{margin-top:14px;color:var(--muted);font-size:.9rem;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-        .muted{color:var(--muted)}
-        .row{display:flex;gap:8px;align-items:center}
-        .col{display:flex;flex-direction:column;gap:8px}
-
-        @media(max-width:720px){header.app-header{flex-direction:column;align-items:flex-start;gap:8px}#lobby-card-preview{display:none!important}#chat-card-preview{display:none!important}}
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MTG Life Tracker</title>
+  <style>
+    :root{
+      --bg:#0f1113;--card:#16181a;--muted:#9aa3ad;--text:#e6eef6;
+      --accent:#2980b9;--accent-strong:#1f6fa8;--green:#27ae60;--red:#c0392b;
+      --dark-border:#22272a;--input-bg:#1f2326;
+    }
+    html,body{height:100%;margin:0}
+    body{
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background:var(--bg);color:var(--text);display:flex;flex-direction:column;
+      align-items:center;padding:20px;box-sizing:border-box;min-height:100vh;
+    }
+    header.app-header{width:100%;max-width:1100px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px}
+    .brand{display:flex;flex-direction:column;gap:2px}
+    .app-title{margin:0;font-size:1.25rem;color:var(--text)}
+    .app-subtitle{margin:0;font-size:0.8rem;color:var(--muted);font-style:italic}
+    nav.site-nav{display:flex;gap:8px}
+    nav.site-nav button{background:transparent;color:var(--text);border:1px solid transparent;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+    nav.site-nav button.active{background:rgba(41,128,185,0.10);border-color:var(--accent)}
+    #app-container{width:100%;max-width:1100px;background:var(--card);padding:20px;border-radius:12px;box-shadow:0 6px 30px rgba(0,0,0,0.6);box-sizing:border-box;position:relative}
+    input,textarea,select{width:100%;padding:12px;margin-bottom:10px;border-radius:8px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);box-sizing:border-box}
+    textarea{min-height:120px;resize:vertical}
+    input,button,textarea,select{-webkit-appearance:none;appearance:none;-webkit-tap-highlight-color:transparent}
+    *:focus,*:focus-visible,*:focus-within{outline:none!important;box-shadow:none!important}
+    button{cursor:pointer;border-radius:8px;padding:10px 12px;border:none;font-weight:700;transition:transform .08s ease,opacity .12s}
+    button:active,.tapped{transform:scale(.96)}
+    .btn-primary{background:linear-gradient(180deg,var(--green),#1f8a4a);color:#fff}
+    .btn-danger{background:linear-gradient(180deg,var(--red),#9b2b24);color:#fff}
+    .btn-secondary{background:linear-gradient(180deg,#3a3a3a,#2f2f2f);color:#fff}
+    button:disabled, input:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.2); }
+    .player-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:12px}
+    @media(max-width:900px){.player-grid{grid-template-columns:1fr}}
+    .player-panel{background:linear-gradient(180deg,rgba(255,255,255,0.01),rgba(255,255,255,0.00));border:1px solid var(--dark-border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+    .player-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .player-name{font-weight:800;font-size:1rem;color:var(--text)}
+    .player-sub{font-size:.85rem;color:var(--muted)}
+    .life-big{font-size:3.2rem;font-weight:900;color:var(--text);letter-spacing:-1px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .control-btn{padding:8px 12px;border-radius:8px;font-weight:800;min-width:56px;text-align:center;background:linear-gradient(180deg,#2b2b2b,#232323);color:var(--text);border:1px solid rgba(255,255,255,0.03);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+    .control-btn.positive{background:linear-gradient(180deg,#2ecc71,#27ae60);color:#04260a}
+    .control-btn.negative{background:linear-gradient(180deg,#ff6b6b,#c0392b);color:#2b0706}
+    .cmd-block{display:flex;justify-content:space-between;align-items:center;gap:8px;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.02)}
+    .cmd-label{font-size:.9rem;color:var(--muted)}
+    .cmd-value{font-weight:800;color:#ffb3b3}
+    .you-badge{background:linear-gradient(90deg,var(--accent),var(--accent-strong));color:#fff;padding:6px 8px;border-radius:999px;font-weight:800;font-size:.8rem}
+    .cmd-controls{display:none;margin-top:10px}
+    .cmd-controls.open{display:block}
+    .per-opp-container{margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:160px;overflow:auto;border-top:1px solid rgba(255,255,255,0.02);padding-top:8px}
+    .per-opp-row{height:44px;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02);box-sizing:border-box}
+    .per-opp-left{font-size:0.9em;color:var(--muted);font-weight:700}
+    .per-opp-controls{display:flex;align-items:center;gap:8px}
+    .outgoing-cmd-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+    .outgoing-cmd-item{font-size:0.95rem;color:var(--text);display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02)}
+    .infect-block{margin-top:8px;display:flex;align-items:center;gap:8px}
+    .infect-label{font-size:0.85rem;color:var(--muted)}
+    .infect-value{font-weight:800;color:#bfe6a8;min-width:36px;text-align:center}
+    .small-btn{padding:6px 8px;font-size:0.85rem;min-width:36px;border-radius:6px}
+    #chat-log{height:150px;overflow-y:auto;border:1px solid rgba(255,255,255,0.03);padding:10px;margin-bottom:10px;border-radius:8px;background:#0f1113;font-size:.9em}
+    .chat-message{margin-bottom:6px;display:flex;gap:8px;align-items:center}
+    .chat-sender{font-weight:800;color:#74b9ff;margin-right:6px}
+    .chat-sender.system{color:#ffd166;font-weight:900}
+    .chat-card{display:inline-block;position:relative;cursor:pointer;color:var(--text);text-decoration:underline dotted rgba(255,255,255,0.08)}
+    #chat-card-preview{position:fixed;top:50%;right:20px;transform:translateY(-50%);width:300px;max-width:40vw;border:3px solid var(--accent);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,0.7);background:#0b0d0f;z-index:1500;display:none;padding:8px}
+    #chat-card-preview img{display:block;width:100%;border-radius:6px}
+    #chat-card-preview .card-title{margin-top:8px;font-weight:800;color:var(--text);text-align:center}
+    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);display:none;justify-content:center;align-items:center;z-index:2000}
+    .modal-content{background:#16181a;color:var(--text);padding:20px;border-radius:10px;width:92%;max-width:520px;box-shadow:0 12px 40px rgba(0,0,0,.7);position:relative}
+    .suggestions-list{position:absolute;width:100%;background:var(--input-bg);border:1px solid var(--dark-border);border-top:none;max-height:150px;overflow-y:auto;z-index:100;border-radius:0 0 8px 8px;box-shadow:0 6px 18px rgba(0,0,0,.6);margin-top:-10px}
+    .suggestions-list:empty{display:none!important;border:none!important;box-shadow:none!important;margin-top:0!important}
+    .suggestion-item{padding:8px 12px;cursor:pointer;color:var(--text)}
+    .suggestion-item:hover{background:rgba(41,128,185,.08)}
+    #lobby-card-preview{position:fixed;top:50%;left:20px;transform:translateY(-50%);width:260px;border:3px solid var(--accent);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.8);z-index:999;display:none;background:#0b0d0f}
+    #lobby-card-preview img{display:block;width:100%;border-radius:6px}
+    #lobby-features{margin-top:18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    #room-footer{margin-top:14px;color:var(--muted);font-size:.9rem;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .muted{color:var(--muted)}
+    .row{display:flex;gap:8px;align-items:center}
+    .col{display:flex;flex-direction:column;gap:8px}
+    @media(max-width:720px){header.app-header{flex-direction:column;align-items:flex-start;gap:8px}#lobby-card-preview{display:none!important}#chat-card-preview{display:none!important}}
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
 <body>
-    <header class="app-header" role="banner">
-        <div class="brand">
-            <h1 class="app-title">Cardboard Bonfire</h1>
-            <div class="app-subtitle">Life tracker for keeping life and bringing people together.</div>
+  <header class="app-header" role="banner">
+    <div class="brand">
+      <h1 class="app-title">Cardboard Bonfire</h1>
+      <div class="app-subtitle">Life tracker for keeping life and bringing people together.</div>
+    </div>
+    <nav class="site-nav" role="navigation" aria-label="Main">
+      <button id="nav-home" class="nav-btn">Home</button>
+      <button id="nav-changes" class="nav-btn">Changes</button>
+      <button id="nav-contact" class="nav-btn">Contact</button>
+    </nav>
+  </header>
+
+  <main id="app-container" role="main"></main>
+
+  <div id="lobby-card-preview" aria-hidden="true"><img id="preview-img" alt="Commander Preview"></div>
+  <div id="chat-card-preview" aria-hidden="true"><img id="chat-preview-img" alt="Card Preview"><div class="card-title" id="chat-preview-title"></div></div>
+  <p id="status-message" class="muted">Initializing...</p>
+
+  <div id="card-search-modal" class="modal" aria-hidden="true">
+    <div class="modal-content">
+      <h3 style="margin-top:0">Card Search (Scryfall)</h3>
+      <input type="text" id="modal-card-name" placeholder="Enter card name" autocomplete="off">
+      <div id="modal-suggestions-list" class="suggestions-list"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button id="modal-search-btn" class="btn-primary">Search & Post</button>
+        <button id="modal-close-btn" class="btn-secondary">Close</button>
+      </div>
+      <div id="search-results" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <div id="edit-commander-modal" class="modal" aria-hidden="true">
+    <div class="modal-content">
+      <h3 style="margin-top:0">Edit Commander</h3>
+      <input type="text" id="edit-commander-name" placeholder="Commander name">
+      <div id="edit-commander-suggestions" class="suggestions-list"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button id="edit-commander-save" class="btn-primary">Save</button>
+        <button id="edit-commander-cancel" class="btn-secondary">Cancel</button>
+      </div>
+      <div id="edit-commander-result" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    // CONFIG
+    const USER_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
+      authDomain: "mtg-life-tool.firebaseapp.com",
+      projectId: "mtg-life-tool",
+      storageBucket: "mtg-life-tool.appspot.com",
+      messagingSenderId: "36730058988",
+      appId: "1:36730058988:web:757e2d9620593b4f65022a"
+    };
+    const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
+    const SCRYFALL_AUTOCOMPLETE_API = "https://api.scryfall.com/cards/autocomplete?q=";
+    const TIMEOUT_MINUTES = 25;
+    const DELETE_ALL_PWD = "DeleteAllRooms";
+    const AUTOCOMPLETE_DEBOUNCE_MS = 100;
+
+    // IMPORTS
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import {
+      getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp,
+      arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // GLOBALS
+    const app = initializeApp(USER_FIREBASE_CONFIG);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let userId = null;
+    let roomId = null;
+    let unsubscribe = null;
+    let autocompleteTimeout = null;
+    const ROOM_COLLECTION = "mtg_rooms";
+    const openCmdControls = new Set();
+
+    function hashPassword(password){ return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex); }
+    function getStartingLife(){ return 40; }
+
+    async function validateCommander(name){
+      if(!name) return null;
+      try{
+        const response = await fetch(`${SCRYFALL_API}${encodeURIComponent(name)}`);
+        const data = await response.json();
+        if(response.ok){
+          const imageUrl = data.image_uris?.normal || data.card_faces?.[0]?.image_uris?.normal;
+          if(imageUrl) return { validatedName: data.name, imageUrl };
+        }
+        return null;
+      }catch(e){ console.error("Scryfall validation error:", e); return null; }
+    }
+
+    async function fetchAutocompleteSuggestions(query, listId, inputId){
+      const suggestionsList = document.getElementById(listId);
+      const inputField = document.getElementById(inputId);
+      if(!suggestionsList || !inputField) return;
+      suggestionsList.innerHTML = '';
+      if(query.length < 2) return;
+      try{
+        const response = await fetch(`${SCRYFALL_AUTOCOMPLETE_API}${encodeURIComponent(query)}`);
+        const data = await response.json();
+        if(response.ok && data.data && data.data.length){
+          data.data.slice(0,5).forEach(suggestion=>{
+            const item = document.createElement('div');
+            item.classList.add('suggestion-item');
+            item.textContent = suggestion;
+            item.onclick = () => { inputField.value = suggestion; suggestionsList.innerHTML = ''; };
+            suggestionsList.appendChild(item);
+          });
+        }
+      }catch(e){ console.error("Autocomplete error:", e); }
+    }
+
+    // compute outgoing map for a source player (what this player's commander has done to others)
+    function computeOutgoingCmdDamage(roomData, sourcePlayerId){
+      const players = roomData.players || {};
+      const order = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? roomData.playersOrder : Object.keys(players || {});
+      const result = [];
+      order.forEach(pid => {
+        if(pid === sourcePlayerId) return;
+        const dmg = (players[sourcePlayerId]?.commanderDamage || {})[pid] || 0;
+        const name = players[pid]?.name || 'Player';
+        result.push({ oppId: pid, oppName: name, dmg });
+      });
+      return result;
+    }
+
+    // compute incoming total for a target player
+    function computeIncomingCmdDamage(roomData, targetPlayerId){
+      let total = 0;
+      const players = roomData.players || {};
+      Object.keys(players).forEach(pid=>{
+        const dmgMap = players[pid]?.commanderDamage || {};
+        const val = dmgMap[targetPlayerId] || 0;
+        total += val;
+      });
+      return total;
+    }
+
+    // ROUTING
+    const navButtons = { home: document.getElementById('nav-home'), changes: document.getElementById('nav-changes'), contact: document.getElementById('nav-contact') };
+    function setActiveNav(page){ Object.values(navButtons).forEach(b=>b.classList.remove('active')); if(navButtons[page]) navButtons[page].classList.add('active'); }
+    function navigateTo(page){ if(location.hash !== `#${page}`) history.pushState(null,'',`#${page}`); setActiveNav(page); if(page === 'home') renderHome(); else if(page === 'changes') renderChanges(); else if(page === 'contact') renderContact(); }
+    navButtons.home.addEventListener('click', ()=>navigateTo('home'));
+    navButtons.changes.addEventListener('click', ()=>navigateTo('changes'));
+    navButtons.contact.addEventListener('click', ()=>navigateTo('contact'));
+    window.addEventListener('popstate', ()=>{ const page = (location.hash || '#home').replace('#','') || 'home'; setActiveNav(page); if(page === 'home') renderHome(); else if(page === 'changes') renderChanges(); else if(page === 'contact') renderContact(); });
+
+    async function renderHome(){ await renderSetupView(); }
+
+    const CHANGELOG = [
+      { version: "0.9.6", date: "2025-12-06", notes: "Stable player order and edit restrictions; UI polish." },
+      { version: "0.9.5", date: "2025-12-05", notes: "UI tweaks: static CMD rows, compact infect controls, preview button adjustments." }
+    ];
+
+    function renderChanges(){
+      const appContainer = document.getElementById('app-container');
+      let html = `<h2 style="margin-top:0;color:var(--text)">Changes</h2><div style="display:flex;flex-direction:column;gap:12px">`;
+      CHANGELOG.forEach(entry=>{
+        html += `<div style="background:#121416;padding:12px;border-radius:8px;border:1px solid var(--dark-border)"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:700;color:var(--text)">${entry.version}</div><div class="muted">${entry.date}</div></div><div style="margin-top:8px;color:var(--text)">${entry.notes}</div></div>`;
+      });
+      html += `</div>`;
+      appContainer.innerHTML = html;
+    }
+
+    function renderContact(){
+      const appContainer = document.getElementById('app-container');
+      appContainer.innerHTML = `
+        <h2 style="margin-top:0;color:var(--text)">Contact</h2>
+        <p class="muted">To contact me, please use your email client. Click the button below to open a new message addressed to <strong>CardboardBonfire@gmail.com</strong>.</p>
+        <div style="max-width:640px">
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="contact-mailto" class="btn-primary">Email CardboardBonfire@gmail.com</button>
+            <button id="contact-copy" class="btn-secondary">Copy Email</button>
+          </div>
+          <p id="contact-status" class="muted" style="margin-top:8px"></p>
         </div>
+      `;
+      document.getElementById('contact-mailto').addEventListener('click', ()=>{
+        const subject = encodeURIComponent("Contact from MTG Life Tracker");
+        const body = encodeURIComponent("Hi,\n\nI'd like to get in touch regarding...");
+        window.location.href = `mailto:CardboardBonfire@gmail.com?subject=${subject}&body=${body}`;
+      });
+      document.getElementById('contact-copy').addEventListener('click', async ()=>{
+        const status = document.getElementById('contact-status');
+        try{ await navigator.clipboard.writeText('CardboardBonfire@gmail.com'); status.textContent = 'Email address copied to clipboard.'; }
+        catch(e){ console.error(e); status.textContent = 'Unable to copy automatically — please copy: CardboardBonfire@gmail.com'; }
+      });
+    }
 
-        <nav class="site-nav" role="navigation" aria-label="Main">
-            <button id="nav-home" class="nav-btn">Home</button>
-            <button id="nav-changes" class="nav-btn">Changes</button>
-            <button id="nav-contact" class="nav-btn">Contact</button>
-        </nav>
-    </header>
+    // SETUP VIEW
+    async function renderSetupView(){
+      const appContainer = document.getElementById("app-container");
+      const statusMessage = document.getElementById("status-message");
+      roomId = null;
+      document.getElementById('lobby-card-preview').style.display = 'none';
+      document.getElementById('card-search-modal').style.display = 'none';
+      statusMessage.textContent = "Browse rooms or create a new one.";
+      statusMessage.style.color = "#9aa3ad";
 
-    <main id="app-container" role="main"></main>
-
-    <!-- Left preview for lobby -->
-    <div id="lobby-card-preview" aria-hidden="true">
-        <img id="preview-img" alt="Commander Preview">
-    </div>
-
-    <!-- Right preview for chat-posted cards -->
-    <div id="chat-card-preview" aria-hidden="true">
-        <img id="chat-preview-img" alt="Card Preview">
-        <div class="card-title" id="chat-preview-title"></div>
-    </div>
-
-    <p id="status-message" class="muted">Initializing...</p>
-
-    <!-- Card search modal (centered overlay) -->
-    <div id="card-search-modal" class="modal" aria-hidden="true">
-        <div class="modal-content">
-            <h3 style="margin-top:0">Card Search (Scryfall)</h3>
-            <input type="text" id="modal-card-name" placeholder="Enter card name" autocomplete="off">
-            <div id="modal-suggestions-list" class="suggestions-list"></div>
-            <div style="display:flex;gap:8px;margin-top:10px;">
-                <button id="modal-search-btn" class="btn-primary">Search & Post</button>
-                <button id="modal-close-btn" class="btn-secondary">Close</button>
-            </div>
-            <div id="search-results" style="margin-top:12px"></div>
+      let listHtml = '<p style="color:var(--text)">Loading active rooms...</p>';
+      appContainer.innerHTML = `
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+          <div style="flex:1"><input type="text" id="search-input" placeholder="Enter Room ID to Create/Search"></div>
+          <div style="width:160px"><button id="search-btn" class="btn-primary" style="width:100%">Find or Create Room</button></div>
         </div>
-    </div>
+        <h3 style="color:var(--text);margin-top:0">Active Rooms</h3>
+        <div id="room-list-container">${listHtml}</div>
+        <div style="margin-top:12px"><button id="delete-all-rooms-btn" class="btn-danger">Delete All Rooms (Admin)</button></div>
+      `;
 
-    <!-- Edit commander modal -->
-    <div id="edit-commander-modal" class="modal" aria-hidden="true">
-        <div class="modal-content">
-            <h3 style="margin-top:0">Edit Commander</h3>
-            <input type="text" id="edit-commander-name" placeholder="Commander name">
-            <div id="edit-commander-suggestions" class="suggestions-list"></div>
-            <div style="display:flex;gap:8px;margin-top:10px;">
-                <button id="edit-commander-save" class="btn-primary">Save</button>
-                <button id="edit-commander-cancel" class="btn-secondary">Cancel</button>
-            </div>
-            <div id="edit-commander-result" style="margin-top:12px"></div>
-        </div>
-    </div>
-
-    <script type="module">
-        // ----------------------------------------------------------------------
-        // CONFIG
-        // ----------------------------------------------------------------------
-        const USER_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
-            authDomain: "mtg-life-tool.firebaseapp.com",
-            projectId: "mtg-life-tool",
-            storageBucket: "mtg-life-tool.appspot.com",
-            messagingSenderId: "36730058988",
-            appId: "1:36730058988:web:757e2d9620593b4f65022a"
-        };
-        const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
-        const SCRYFALL_AUTOCOMPLETE_API = "https://api.scryfall.com/cards/autocomplete?q=";
-        const TIMEOUT_MINUTES = 25;
-        const DELETE_ALL_PWD = "DeleteAllRooms";
-        const AUTOCOMPLETE_DEBOUNCE_MS = 100;
-
-        // ----------------------------------------------------------------------
-        // IMPORTS
-        // ----------------------------------------------------------------------
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import {
-            getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp,
-            arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc, arrayRemove, arrayUnion as _arrayUnion
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // ----------------------------------------------------------------------
-        // GLOBALS
-        // ----------------------------------------------------------------------
-        const app = initializeApp(USER_FIREBASE_CONFIG);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        let userId = null;
-        let roomId = null;
-        let unsubscribe = null;
-        let autocompleteTimeout = null;
-        const ROOM_COLLECTION = "mtg_rooms";
-
-        // Track which players' CMD controls are open (persist across renders)
-        const openCmdControls = new Set();
-
-        // ----------------------------------------------------------------------
-        // HELPERS
-        // ----------------------------------------------------------------------
-        function hashPassword(password){ return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex); }
-        function getStartingLife(){ return 40; }
-
-        /**
-         * Check room lastActive and delete if expired.
-         * Returns true if the room was deleted, false otherwise.
-         */
-        async function checkAndDeleteIfExpired(roomIdToCheck, roomData) {
-            try {
-                if (!roomData) return false;
-                const lastActiveField = roomData.lastActive;
-                let lastActiveDate = null;
-                if (!lastActiveField) return false;
-                if (typeof lastActiveField.toDate === 'function') lastActiveDate = lastActiveField.toDate();
-                else if (lastActiveField instanceof Date) lastActiveDate = lastActiveField;
-                else if (typeof lastActiveField === 'number') lastActiveDate = new Date(lastActiveField);
-                else return false;
-                const elapsedMinutes = (Date.now() - lastActiveDate.getTime()) / (1000 * 60);
-                if (elapsedMinutes > TIMEOUT_MINUTES) {
-                    try { await deleteDoc(doc(db, ROOM_COLLECTION, roomIdToCheck)); } catch (e) { console.error("Failed to delete expired room:", e); }
-                    return true;
-                }
-                return false;
-            } catch (e) {
-                console.error("checkAndDeleteIfExpired error:", e);
-                return false;
-            }
+      try{
+        const q = query(collection(db, ROOM_COLLECTION), limit(15));
+        const snap = await getDocs(q);
+        if(snap.empty) listHtml = '<p style="color:var(--text)">No active rooms. Create one above!</p>';
+        else{
+          listHtml = '';
+          snap.forEach(docSnap=>{
+            const rData = docSnap.data();
+            const rId = docSnap.id;
+            const pCount = Object.keys(rData.players || {}).length;
+            const ownerPlayer = rData.players[rData.ownerId];
+            const ownerCmdName = ownerPlayer?.commanderName || ownerPlayer?.commander || 'N/A';
+            const ownerCmdImage = ownerPlayer?.commanderImageUrl || '';
+            const ownerName = ownerPlayer?.name || 'Owner';
+            listHtml += `
+              <div class="room-item" style="display:flex;justify-content:space-between;align-items:center;background-color:#121416;padding:12px;margin-bottom:8px;border-radius:8px;border:1px solid var(--dark-border)">
+                <div class="room-info">
+                  <div style="font-weight:800;color:var(--text)">${rId}</div>
+                  <div style="font-size:.9em;color:var(--muted);margin-top:6px">
+                    ${pCount} Player(s) • Owner: ${ownerName}
+                    <span class="lobby-cmd-name" data-img-url="${ownerCmdImage}" style="cursor:help;margin-left:8px;color:var(--muted)">[${ownerCmdName}]</span>
+                  </div>
+                </div>
+                <div><button class="join-btn btn-secondary" data-rid="${rId}" style="width:auto">Join</button></div>
+              </div>
+            `;
+          });
         }
+      }catch(e){
+        console.error("List error:",e);
+        listHtml = `<p style="color:#ff5555">Error loading rooms. Permissions might be initializing...</p>`;
+      }
 
-        async function validateCommander(name){
-            if(!name) return null;
-            try{
-                const response = await fetch(`${SCRYFALL_API}${encodeURIComponent(name)}`);
-                const data = await response.json();
-                if(response.ok){
-                    const imageUrl = data.image_uris?.normal || data.card_faces?.[0]?.image_uris?.normal;
-                    if(imageUrl) return { validatedName: data.name, imageUrl };
-                }
-                return null;
-            }catch(e){ console.error("Scryfall validation error:", e); return null; }
-        }
+      const listContainer = document.getElementById("room-list-container");
+      if(listContainer) listContainer.innerHTML = listHtml;
 
-        async function fetchAutocompleteSuggestions(query, listId, inputId){
-            const suggestionsList = document.getElementById(listId);
-            const inputField = document.getElementById(inputId);
-            if(!suggestionsList || !inputField) return;
-            suggestionsList.innerHTML = '';
-            if(query.length < 2) return;
-            try{
-                const response = await fetch(`${SCRYFALL_AUTOCOMPLETE_API}${encodeURIComponent(query)}`);
-                const data = await response.json();
-                if(response.ok && data.data && data.data.length){
-                    data.data.slice(0,5).forEach(suggestion=>{
-                        const item = document.createElement('div');
-                        item.classList.add('suggestion-item');
-                        item.textContent = suggestion;
-                        item.onclick = () => {
-                            inputField.value = suggestion;
-                            suggestionsList.innerHTML = '';
-                        };
-                        suggestionsList.appendChild(item);
-                    });
-                }
-            }catch(e){ console.error("Autocomplete error:", e); }
-        }
-
-        // ----------------------------------------------------------------------
-        // New helper: compute outgoing commander damage map for a source player
-        // Returns array of { oppId, oppName, dmg } in the same order as playersOrder
-        function computeOutgoingCmdDamage(roomData, sourcePlayerId){
-            const players = roomData.players || {};
-            const order = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? roomData.playersOrder : Object.keys(players || {});
-            const result = [];
-            order.forEach(pid => {
-                if(pid === sourcePlayerId) return; // skip self
-                const dmg = (players[sourcePlayerId]?.commanderDamage || {})[pid] || 0;
-                const name = players[pid]?.name || 'Player';
-                result.push({ oppId: pid, oppName: name, dmg });
-            });
-            return result;
-        }
-
-        // Existing helper: compute incoming commander damage total for a target player
-        function computeIncomingCmdDamage(roomData, targetPlayerId){
-            let total = 0;
-            const players = roomData.players || {};
-            Object.keys(players).forEach(pid=>{
-                const dmgMap = players[pid]?.commanderDamage || {};
-                const val = dmgMap[targetPlayerId] || 0;
-                total += val;
-            });
-            return total;
-        }
-
-        // ----------------------------------------------------------------------
-        // ROUTING & PAGES
-        // ----------------------------------------------------------------------
-        const navButtons = {
-            home: document.getElementById('nav-home'),
-            changes: document.getElementById('nav-changes'),
-            contact: document.getElementById('nav-contact')
-        };
-
-        function setActiveNav(page){
-            Object.values(navButtons).forEach(b=>b.classList.remove('active'));
-            if(navButtons[page]) navButtons[page].classList.add('active');
-        }
-
-        function navigateTo(page){
-            if(location.hash !== `#${page}`) history.pushState(null,'',`#${page}`);
-            setActiveNav(page);
-            if(page === 'home') renderHome();
-            else if(page === 'changes') renderChanges();
-            else if(page === 'contact') renderContact();
-        }
-
-        navButtons.home.addEventListener('click', ()=>navigateTo('home'));
-        navButtons.changes.addEventListener('click', ()=>navigateTo('changes'));
-        navButtons.contact.addEventListener('click', ()=>navigateTo('contact'));
-        window.addEventListener('popstate', ()=>{
-            const page = (location.hash || '#home').replace('#','') || 'home';
-            setActiveNav(page);
-            if(page === 'home') renderHome();
-            else if(page === 'changes') renderChanges();
-            else if(page === 'contact') renderContact();
+      if(listContainer){
+        listContainer.querySelectorAll('.join-btn').forEach(btn=>{
+          btn.addEventListener('click', (e)=> promptPassword(e.target.dataset.rid, 'join'));
         });
 
-        async function renderHome(){ await renderSetupView(); }
+        const previewCardEl = document.getElementById('lobby-card-preview');
+        const previewImgEl = document.getElementById('preview-img');
 
-        const CHANGELOG = [
-            { version: "0.9.6", date: "2025-12-06", notes: "Stable player order and edit restrictions; UI polish." },
-            { version: "0.9.5", date: "2025-12-05", notes: "UI tweaks: static CMD rows, compact infect controls, preview button adjustments." }
-        ];
+        listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan=>{
+          const imageUrl = cmdSpan.dataset.imgUrl;
+          cmdSpan.addEventListener('mouseenter', ()=>{
+            if(imageUrl && previewCardEl && previewImgEl){ previewImgEl.src = imageUrl; previewCardEl.style.display = 'block'; }
+          });
+          cmdSpan.addEventListener('mouseleave', ()=>{
+            if(previewCardEl){ previewCardEl.style.display = 'none'; previewImgEl.src = ''; }
+          });
+        });
+      }
 
-        function renderChanges(){
-            const appContainer = document.getElementById('app-container');
-            let html = `<h2 style="margin-top:0;color:var(--text)">Changes</h2><div style="display:flex;flex-direction:column;gap:12px">`;
-            CHANGELOG.forEach(entry=>{
-                html += `<div style="background:#121416;padding:12px;border-radius:8px;border:1px solid var(--dark-border)"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:700;color:var(--text)">${entry.version}</div><div class="muted">${entry.date}</div></div><div style="margin-top:8px;color:var(--text)">${entry.notes}</div></div>`;
-            });
-            html += `</div>`;
-            appContainer.innerHTML = html;
+      document.getElementById("search-btn").onclick = async ()=>{
+        const val = document.getElementById("search-input").value.trim().toLowerCase();
+        if(!val) return;
+        const snap = await getDoc(doc(db, ROOM_COLLECTION, val));
+        if(snap.exists()) promptPassword(val,'join'); else promptPassword(val,'create');
+      };
+
+      document.getElementById("delete-all-rooms-btn").addEventListener('click', deleteAllRooms);
+    }
+
+    // RENDER ROOM VIEW
+    function renderChat(chatLog, playerName){
+      const chatLogDiv = document.getElementById('chat-log');
+      if(!chatLogDiv) return;
+      chatLogDiv.innerHTML = '';
+      const displayLog = (chatLog || []).slice(-200);
+      displayLog.forEach(msg=>{
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('chat-message');
+        const senderSpan = document.createElement('span');
+        senderSpan.classList.add('chat-sender');
+        if(msg.senderName === 'System'){ senderSpan.classList.add('system'); senderSpan.textContent = 'System:'; }
+        else senderSpan.textContent = `${msg.senderName}:`;
+        messageDiv.appendChild(senderSpan);
+        if(msg.cardImageUrl){
+          const cardSpan = document.createElement('span');
+          cardSpan.classList.add('chat-card');
+          cardSpan.textContent = ` ${msg.message} `;
+          cardSpan.dataset.cardImageUrl = msg.cardImageUrl;
+          cardSpan.dataset.cardName = msg.message;
+          messageDiv.appendChild(cardSpan);
+          cardSpan.addEventListener('mouseenter', (e)=>{ showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          cardSpan.addEventListener('mouseleave', (e)=>{ hideChatCardPreviewWithDelay(); });
+          cardSpan.addEventListener('click', (e)=>{ const preview = document.getElementById('chat-card-preview'); if(preview.style.display === 'block') hideChatCardPreviewImmediate(); else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+        } else {
+          messageDiv.appendChild(document.createTextNode(' ' + msg.message));
         }
+        chatLogDiv.appendChild(messageDiv);
+      });
+      chatLogDiv.scrollTop = chatLogDiv.scrollHeight;
+    }
 
-        function renderContact(){
-            const appContainer = document.getElementById('app-container');
-            appContainer.innerHTML = `
-                <h2 style="margin-top:0;color:var(--text)">Contact</h2>
-                <p class="muted">To contact me, please use your email client. Click the button below to open a new message addressed to <strong>CardboardBonfire@gmail.com</strong>.</p>
-                <div style="max-width:640px">
-                    <div style="display:flex;gap:8px;margin-top:8px">
-                        <button id="contact-mailto" class="btn-primary">Email CardboardBonfire@gmail.com</button>
-                        <button id="contact-copy" class="btn-secondary">Copy Email</button>
-                    </div>
-                    <p id="contact-status" class="muted" style="margin-top:8px"></p>
+    let chatPreviewHideTimer = null;
+    function showChatCardPreview(imageUrl, title){
+      if(chatPreviewHideTimer){ clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = null; }
+      const preview = document.getElementById('chat-card-preview');
+      const img = document.getElementById('chat-preview-img');
+      const t = document.getElementById('chat-preview-title');
+      img.src = imageUrl; t.textContent = title; preview.style.display = 'block';
+    }
+    function hideChatCardPreviewWithDelay(){ if(chatPreviewHideTimer) clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = setTimeout(()=>{ hideChatCardPreviewImmediate(); }, 300); }
+    function hideChatCardPreviewImmediate(){ const preview = document.getElementById('chat-card-preview'); const img = document.getElementById('chat-preview-img'); const t = document.getElementById('chat-preview-title'); preview.style.display = 'none'; img.src = ''; t.textContent = ''; if(chatPreviewHideTimer){ clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = null; } }
+
+    function renderRoomView(roomData){
+      const appContainer = document.getElementById("app-container");
+      const statusMessage = document.getElementById("status-message");
+      document.getElementById('lobby-card-preview').style.display = 'none';
+      document.getElementById('card-search-modal').style.display = 'none';
+      const currentPlayerName = roomData.players[userId]?.name || 'You';
+      statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
+
+      let html = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+          <div>
+            <h2 style="margin:0;color:var(--text)">Room: ${roomId}</h2>
+            <div style="color:var(--muted);font-size:.9rem;margin-top:6px">Players: ${Object.keys(roomData.players).length}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="card-search-btn" class="btn-secondary">Card Search</button>
+            <button id="restart-game-btn" class="btn-secondary">Restart Game</button>
+            <button id="share-invite-btn" class="btn-secondary">Share Invite</button>
+            <button id="leave-room-btn" class="btn-danger">Leave Room</button>
+          </div>
+        </div>
+      `;
+
+      const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? [...roomData.playersOrder] : Object.keys(roomData.players || {});
+      if (playerIds.includes(userId)) { const idx = playerIds.indexOf(userId); if (idx > 0) { playerIds.splice(idx, 1); playerIds.unshift(userId); } }
+      else if (roomData.players && roomData.players[userId]) playerIds.unshift(userId);
+
+      html += `<div class="player-grid">`;
+      playerIds.forEach(playerId=>{
+        const player = roomData.players[playerId];
+        if(!player) return;
+        const isMe = playerId === userId;
+        const life = player.life ?? getStartingLife();
+        const commanderName = player.commanderName || player.commander || 'N/A';
+        const infectVal = player.infect || 0;
+
+        // Build per-opponent rows: show the damage that each opponent has dealt to this player.
+        // Value comes from players[oppId].commanderDamage[playerId]
+        let perOppRows = '';
+        const opponents = playerIds.filter(id => id !== playerId);
+        if(opponents.length > 0){
+          opponents.forEach(oppId => {
+            // value is opponent's outgoing to this player
+            const dmg = (roomData.players[oppId]?.commanderDamage || {})[playerId] || 0;
+            const oppName = roomData.players[oppId]?.name || 'Player';
+            // only allow editing these incoming values if the target player is you (playerId === userId)
+            const editable = (playerId === userId);
+            const disabledAttr = editable ? '' : 'disabled';
+            perOppRows += `
+              <div class="per-opp-row" data-target="${playerId}" data-opp="${oppId}">
+                <div class="per-opp-left">From <strong>${oppName}</strong></div>
+                <div class="per-opp-controls">
+                  <button class="control-btn negative small-btn" data-action="cmd-target-sub" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>-</button>
+                  <input type="number" value="${dmg}" data-target="${playerId}" data-opp="${oppId}" class="cmd-target-input" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center" ${disabledAttr}>
+                  <button class="control-btn negative small-btn" data-action="cmd-target-add" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>+</button>
                 </div>
+              </div>
             `;
-            document.getElementById('contact-mailto').addEventListener('click', ()=>{
-                const subject = encodeURIComponent("Contact from MTG Life Tracker");
-                const body = encodeURIComponent("Hi,\n\nI'd like to get in touch regarding...");
-                window.location.href = `mailto:CardboardBonfire@gmail.com?subject=${subject}&body=${body}`;
-            });
-            document.getElementById('contact-copy').addEventListener('click', async ()=>{
-                const status = document.getElementById('contact-status');
-                try{ await navigator.clipboard.writeText('CardboardBonfire@gmail.com'); status.textContent = 'Email address copied to clipboard.'; }
-                catch(e){ console.error(e); status.textContent = 'Unable to copy automatically — please copy: CardboardBonfire@gmail.com'; }
-            });
+          });
         }
 
-        // ----------------------------------------------------------------------
-        // SETUP VIEW (room list + create)
-        // ----------------------------------------------------------------------
-        async function renderSetupView(){
-            const appContainer = document.getElementById("app-container");
-            const statusMessage = document.getElementById("status-message");
-            roomId = null;
-            document.getElementById('lobby-card-preview').style.display = 'none';
-            document.getElementById('card-search-modal').style.display = 'none';
-            statusMessage.textContent = "Browse rooms or create a new one.";
-            statusMessage.style.color = "#9aa3ad";
+        // Infect controls (only editable for your own player)
+        const infectControlsHtml = `
+          <div style="display:flex;align-items:center;gap:6px">
+            <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-</button>
+            <div class="infect-value" id="infect-${playerId}">${infectVal}</div>
+            <button class="control-btn small-btn" data-action="infect-add" data-player="${playerId}" ${isMe ? '' : 'disabled'}>+</button>
+          </div>
+        `;
 
-            let listHtml = '<p style="color:var(--text)">Loading active rooms...</p>';
-            appContainer.innerHTML = `
-                <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
-                    <div style="flex:1"><input type="text" id="search-input" placeholder="Enter Room ID to Create/Search"></div>
-                    <div style="width:160px"><button id="search-btn" class="btn-primary" style="width:100%">Find or Create Room</button></div>
+        // CMD block: if this is your panel, show outgoing breakdown (what your commander has done to others).
+        // For others, show incoming total.
+        let cmdBlockInner = '';
+        if(isMe){
+          const outgoing = computeOutgoingCmdDamage(roomData, playerId);
+          let outgoingHtml = '<div class="outgoing-cmd-list">';
+          if(outgoing.length === 0) outgoingHtml += `<div class="outgoing-cmd-item" style="justify-content:center;color:var(--muted)">No opponents yet</div>`;
+          else {
+            outgoing.forEach(item=>{
+              outgoingHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">CMD DMG ${item.oppName}</div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
+            });
+          }
+          outgoingHtml += '</div>';
+          cmdBlockInner = `
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div class="cmd-label" style="font-weight:700;color:var(--muted)">CMD DMG (your commander → others)</div>
+              ${outgoingHtml}
+            </div>
+          `;
+        } else {
+          const incomingTotal = computeIncomingCmdDamage(roomData, playerId);
+          cmdBlockInner = `
+            <div>
+              <div class="cmd-label">CMD DMG</div>
+              <div class="cmd-value" id="cmd-total-${playerId}">${incomingTotal}</div>
+            </div>
+          `;
+        }
+
+        html += `
+          <div class="player-panel" data-player-id="${playerId}">
+            <div class="player-header">
+              <div>
+                <div class="player-name">${isMe ? 'YOU' : (player.name || 'Player')}</div>
+                <div class="player-sub">Commander: ${commanderName}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                ${isMe ? `<div class="you-badge">YOU</div>` : `<div class="player-sub">ID: ${playerId.slice(0,6)}</div>`}
+                <div class="player-sub" style="font-size:.85rem">Life</div>
+              </div>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <div>
+                <div class="life-big" id="life-display-${playerId}">${life}</div>
+
+                <div style="margin-top:8px">
+                  <div class="cmd-block">${cmdBlockInner}</div>
+                  <div class="infect-block" style="margin-top:8px">${infectControlsHtml}</div>
                 </div>
-                <h3 style="color:var(--text);margin-top:0">Active Rooms</h3>
-                <div id="room-list-container">${listHtml}</div>
-                <div style="margin-top:12px"><button id="delete-all-rooms-btn" class="btn-danger">Delete All Rooms (Admin)</button></div>
-            `;
+              </div>
 
-            try{
-                const q = query(collection(db, ROOM_COLLECTION), limit(15));
-                const snap = await getDocs(q);
-                if(snap.empty) listHtml = '<p style="color:var(--text)">No active rooms. Create one above!</p>';
-                else{
-                    listHtml = '';
-                    snap.forEach(docSnap=>{
-                        const rData = docSnap.data();
-                        const rId = docSnap.id;
-                        const pCount = Object.keys(rData.players || {}).length;
-                        const ownerPlayer = rData.players[rData.ownerId];
-                        const ownerCmdName = ownerPlayer?.commanderName || ownerPlayer?.commander || 'N/A';
-                        const ownerCmdImage = ownerPlayer?.commanderImageUrl || '';
-                        const ownerName = ownerPlayer?.name || 'Owner';
-                        listHtml += `
-                            <div class="room-item" style="display:flex;justify-content:space-between;align-items:center;background-color:#121416;padding:12px;margin-bottom:8px;border-radius:8px;border:1px solid var(--dark-border)">
-                                <div class="room-info">
-                                    <div style="font-weight:800;color:var(--text)">${rId}</div>
-                                    <div style="font-size:.9em;color:var(--muted);margin-top:6px">
-                                        ${pCount} Player(s) • Owner: ${ownerName}
-                                        <span class="lobby-cmd-name" data-img-url="${ownerCmdImage}" style="cursor:help;margin-left:8px;color:var(--muted)">[${ownerCmdName}]</span>
-                                    </div>
-                                </div>
-                                <div><button class="join-btn btn-secondary" data-rid="${rId}" style="width:auto">Join</button></div>
-                            </div>
-                        `;
-                    });
-                }
-            }catch(e){
-                console.error("List error:",e);
-                listHtml = `<p style="color:#ff5555">Error loading rooms. Permissions might be initializing...</p>`;
-            }
-
-            const listContainer = document.getElementById("room-list-container");
-            if(listContainer) listContainer.innerHTML = listHtml;
-
-            if(listContainer){
-                listContainer.querySelectorAll('.join-btn').forEach(btn=>{
-                    btn.addEventListener('click', (e)=> promptPassword(e.target.dataset.rid, 'join'));
-                });
-
-                const previewCardEl = document.getElementById('lobby-card-preview');
-                const previewImgEl = document.getElementById('preview-img');
-
-                listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan=>{
-                    const imageUrl = cmdSpan.dataset.imgUrl;
-                    cmdSpan.addEventListener('mouseenter', ()=>{
-                        if(imageUrl && previewCardEl && previewImgEl){ previewImgEl.src = imageUrl; previewCardEl.style.display = 'block'; }
-                    });
-                    cmdSpan.addEventListener('mouseleave', ()=>{
-                        if(previewCardEl){ previewCardEl.style.display = 'none'; previewImgEl.src = ''; }
-                    });
-                });
-            }
-
-            document.getElementById("search-btn").onclick = async ()=>{
-                const val = document.getElementById("search-input").value.trim().toLowerCase();
-                if(!val) return;
-                const snap = await getDoc(doc(db, ROOM_COLLECTION, val));
-                if(snap.exists()) promptPassword(val,'join'); else promptPassword(val,'create');
-            };
-
-            document.getElementById("delete-all-rooms-btn").addEventListener('click', deleteAllRooms);
-        }
-
-        // ----------------------------------------------------------------------
-        // ROOM VIEW (stylized) + features
-        // ----------------------------------------------------------------------
-        function renderChat(chatLog, playerName){
-            const chatLogDiv = document.getElementById('chat-log');
-            if(!chatLogDiv) return;
-            chatLogDiv.innerHTML = '';
-            const displayLog = (chatLog || []).slice(-200);
-            displayLog.forEach(msg=>{
-                const messageDiv = document.createElement('div');
-                messageDiv.classList.add('chat-message');
-
-                const senderSpan = document.createElement('span');
-                senderSpan.classList.add('chat-sender');
-                if(msg.senderName === 'System'){ senderSpan.classList.add('system'); senderSpan.textContent = 'System:'; }
-                else senderSpan.textContent = `${msg.senderName}:`;
-
-                messageDiv.appendChild(senderSpan);
-
-                if(msg.cardImageUrl){
-                    const cardSpan = document.createElement('span');
-                    cardSpan.classList.add('chat-card');
-                    cardSpan.textContent = ` ${msg.message} `;
-                    // store data attributes for preview
-                    cardSpan.dataset.cardImageUrl = msg.cardImageUrl;
-                    cardSpan.dataset.cardName = msg.message;
-                    messageDiv.appendChild(cardSpan);
-
-                    // attach hover/click listeners to show right preview
-                    cardSpan.addEventListener('mouseenter', (e)=>{
-                        showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName);
-                    });
-                    cardSpan.addEventListener('mouseleave', (e)=>{
-                        hideChatCardPreviewWithDelay();
-                    });
-                    // also show on click for touch devices
-                    cardSpan.addEventListener('click', (e)=>{
-                        const preview = document.getElementById('chat-card-preview');
-                        if(preview.style.display === 'block') hideChatCardPreviewImmediate();
-                        else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName);
-                    });
-                } else {
-                    messageDiv.appendChild(document.createTextNode(' ' + msg.message));
-                }
-
-                chatLogDiv.appendChild(messageDiv);
-            });
-            chatLogDiv.scrollTop = chatLogDiv.scrollHeight;
-        }
-
-        let chatPreviewHideTimer = null;
-        function showChatCardPreview(imageUrl, title){
-            if(chatPreviewHideTimer){ clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = null; }
-            const preview = document.getElementById('chat-card-preview');
-            const img = document.getElementById('chat-preview-img');
-            const t = document.getElementById('chat-preview-title');
-            img.src = imageUrl;
-            t.textContent = title;
-            preview.style.display = 'block';
-        }
-        function hideChatCardPreviewWithDelay(){
-            if(chatPreviewHideTimer) clearTimeout(chatPreviewHideTimer);
-            chatPreviewHideTimer = setTimeout(()=>{ hideChatCardPreviewImmediate(); }, 300);
-        }
-        function hideChatCardPreviewImmediate(){
-            const preview = document.getElementById('chat-card-preview');
-            const img = document.getElementById('chat-preview-img');
-            const t = document.getElementById('chat-preview-title');
-            preview.style.display = 'none';
-            img.src = '';
-            t.textContent = '';
-            if(chatPreviewHideTimer){ clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = null; }
-        }
-
-        function renderRoomView(roomData){
-            const appContainer = document.getElementById("app-container");
-            const statusMessage = document.getElementById("status-message");
-            document.getElementById('lobby-card-preview').style.display = 'none';
-            document.getElementById('card-search-modal').style.display = 'none';
-            const currentPlayerName = roomData.players[userId]?.name || 'You';
-            statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
-
-            // header + controls
-            let html = `
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
-                    <div>
-                        <h2 style="margin:0;color:var(--text)">Room: ${roomId}</h2>
-                        <div style="color:var(--muted);font-size:.9rem;margin-top:6px">Players: ${Object.keys(roomData.players).length}</div>
-                    </div>
-                    <div style="display:flex;gap:8px;align-items:center">
-                        <button id="card-search-btn" class="btn-secondary">Card Search</button>
-                        <button id="restart-game-btn" class="btn-secondary">Restart Game</button>
-                        <button id="share-invite-btn" class="btn-secondary">Share Invite</button>
-                        <button id="leave-room-btn" class="btn-danger">Leave Room</button>
-                    </div>
+              <div style="min-width:220px;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+                <div class="controls" style="flex-direction:column;width:100%">
+                  <div style="display:flex;gap:8px;width:100%">
+                    <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-5" ${isMe ? '' : 'disabled'}>-5</button>
+                    <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-1" ${isMe ? '' : 'disabled'}>-1</button>
+                    <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+1" ${isMe ? '' : 'disabled'}>+1</button>
+                    <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+5" ${isMe ? '' : 'disabled'}>+5</button>
+                  </div>
+                  <div style="display:flex;gap:8px;width:100%">
+                    <button class="control-btn" data-action="cmd-toggle" data-player="${playerId}">CMD DMG</button>
+                    ${!isMe ? `<button class="control-btn preview" data-action="show-commander" data-player="${playerId}">Preview</button>` : ''}
+                    ${isMe ? `<button class="control-btn" data-action="edit-commander" data-player="${playerId}">Edit Commander</button>` : ''}
+                  </div>
                 </div>
-            `;
+              </div>
+            </div>
 
-            // Use stable playersOrder if present, otherwise fallback to players keys
-            const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
-                ? [...roomData.playersOrder]
-                : Object.keys(roomData.players || {});
+            <div class="cmd-controls" id="cmd-controls-${playerId}">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="font-weight:700;color:var(--muted);font-size:0.9em">Edit this player's commander damage values</div>
+                <div class="per-opp-container" id="per-opp-${playerId}">${perOppRows}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      html += `</div>`;
 
-            // Ensure current user is first for convenience but keep stable order for others
-            if (playerIds.includes(userId)) {
-                const idx = playerIds.indexOf(userId);
-                if (idx > 0) {
-                    playerIds.splice(idx, 1);
-                    playerIds.unshift(userId);
-                }
-            } else if (roomData.players && roomData.players[userId]) {
-                playerIds.unshift(userId);
-            }
+      html += `
+        <div id="lobby-features">
+          <div style="flex:1;min-width:260px">
+            <div style="display:flex;gap:8px;align-items:center">
+              <button id="roll-dice-btn" class="btn-secondary">Roll D20</button>
+              <div id="roll-result" style="font-weight:800;color:var(--text);margin-left:8px">-</div>
+            </div>
+          </div>
+          <div style="min-width:320px">
+            <div id="chat-container">
+              <div style="font-weight:700;color:var(--text);margin-bottom:8px">Game Chat</div>
+              <div id="chat-log"></div>
+              <form id="chat-input-form" style="display:flex;gap:8px;margin-top:8px">
+                <input type="text" id="chat-message-input" placeholder="Type message..." maxlength="150" required>
+                <button type="submit" class="btn-primary">Send</button>
+              </form>
+            </div>
+          </div>
+        </div>
 
-            html += `<div class="player-grid">`;
-            playerIds.forEach(playerId=>{
-                const player = roomData.players[playerId];
-                if(!player) return; // skip if player data missing
-                const isMe = playerId === userId;
-                const life = player.life ?? getStartingLife();
-                const commanderName = player.commanderName || player.commander || 'N/A';
-                const infectVal = player.infect || 0;
+        <div id="room-footer">
+          <div class="muted">This view is styled for quick tabletop play. Your state is saved to the room in Firebase.</div>
+          <div class="muted">Tip: Use Card Search to post a card to chat; hover the card name to preview it on the right.</div>
+        </div>
+      `;
 
-                // per-opponent rows will be rendered only inside the toggled cmd-controls
-                let perOppRows = '';
-                const opponents = playerIds.filter(id => id !== playerId);
-                if(opponents.length > 0){
-                    opponents.forEach(oppId => {
-                        const dmg = (player.commanderDamage && player.commanderDamage[oppId]) || 0;
-                        const oppName = roomData.players[oppId]?.name || 'Player';
-                        // disable controls if not your own player
-                        const disabledAttr = isMe ? '' : 'disabled';
-                        perOppRows += `
-                            <div class="per-opp-row" data-target="${playerId}" data-opp="${oppId}">
-                                <div class="per-opp-left">From <strong>${oppName}</strong></div>
-                                <div class="per-opp-controls">
-                                    <button class="control-btn negative small-btn" data-action="cmd-target-sub" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>-</button>
-                                    <input type="number" value="${dmg}" data-target="${playerId}" data-opp="${oppId}" class="cmd-target-input" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center" ${disabledAttr}>
-                                    <button class="control-btn negative small-btn" data-action="cmd-target-add" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>+</button>
-                                </div>
-                            </div>
-                        `;
-                    });
-                }
+      appContainer.innerHTML = html;
 
-                // Infect controls (compact, next to value) - only allow editing your own infect
-                const infectControlsHtml = `
-                    <div style="display:flex;align-items:center;gap:6px">
-                        <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-</button>
-                        <div class="infect-value" id="infect-${playerId}">${infectVal}</div>
-                        <button class="control-btn small-btn" data-action="infect-add" data-player="${playerId}" ${isMe ? '' : 'disabled'}>+</button>
-                    </div>
-                `;
+      // render chat
+      renderChat(roomData.chatLog || [], currentPlayerName);
 
-                // For the CMD block: if this is your panel, show outgoing per-player breakdown (what your commander has done to others).
-                // For other players, keep showing incoming total (what others have done to them).
-                let cmdBlockInner = '';
-                if(isMe){
-                    const outgoing = computeOutgoingCmdDamage(roomData, playerId);
-                    let outgoingHtml = '<div class="outgoing-cmd-list">';
-                    if(outgoing.length === 0) outgoingHtml += `<div class="outgoing-cmd-item" style="justify-content:center;color:var(--muted)">No opponents yet</div>`;
-                    else {
-                        outgoing.forEach(item=>{
-                            outgoingHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">CMD DMG ${item.oppName}</div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
-                        });
-                    }
-                    outgoingHtml += '</div>';
-                    cmdBlockInner = `
-                        <div style="display:flex;flex-direction:column;gap:6px">
-                            <div class="cmd-label" style="font-weight:700;color:var(--muted)">CMD DMG (your commander → others)</div>
-                            ${outgoingHtml}
-                        </div>
-                    `;
-                } else {
-                    // incoming total for others
-                    const incomingTotal = computeIncomingCmdDamage(roomData, playerId);
-                    cmdBlockInner = `
-                        <div>
-                            <div class="cmd-label">CMD DMG</div>
-                            <div class="cmd-value" id="cmd-total-${playerId}">${incomingTotal}</div>
-                        </div>
-                    `;
-                }
+      // reapply openCmdControls state after render
+      const playerIdsAfter = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? [...roomData.playersOrder] : Object.keys(roomData.players || {});
+      if (playerIdsAfter.includes(userId)) { const idx = playerIdsAfter.indexOf(userId); if (idx > 0) { playerIdsAfter.splice(idx,1); playerIdsAfter.unshift(userId); } }
+      playerIdsAfter.forEach(pid => {
+        const controls = document.getElementById(`cmd-controls-${pid}`);
+        if(controls){ if(openCmdControls.has(pid)) controls.classList.add('open'); else controls.classList.remove('open'); }
+      });
 
-                html += `
-                    <div class="player-panel" data-player-id="${playerId}">
-                        <div class="player-header">
-                            <div>
-                                <div class="player-name">${isMe ? 'YOU' : (player.name || 'Player')}</div>
-                                <div class="player-sub">Commander: ${commanderName}</div>
-                            </div>
-                            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-                                ${isMe ? `<div class="you-badge">YOU</div>` : `<div class="player-sub">ID: ${playerId.slice(0,6)}</div>`}
-                                <div class="player-sub" style="font-size:.85rem">Life</div>
-                            </div>
-                        </div>
+      // attach listeners
+      document.querySelectorAll('.control-btn').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          if (btn.disabled) return;
+          const action = btn.dataset.action;
+          const targetPlayer = btn.dataset.player;
+          const delta = parseInt(btn.dataset.delta || '0');
 
-                        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-                            <div>
-                                <div class="life-big" id="life-display-${playerId}">${life}</div>
+          if(action === 'life'){ await updateLifeForPlayer(targetPlayer, delta); }
+          else if(action === 'cmd-toggle'){
+            const controls = document.getElementById(`cmd-controls-${targetPlayer}`);
+            if(!controls) return;
+            const isOpen = controls.classList.toggle('open');
+            if(isOpen) openCmdControls.add(targetPlayer); else openCmdControls.delete(targetPlayer);
+          }
+          else if(action === 'show-commander'){
+            const imgUrl = roomData.players[targetPlayer]?.commanderImageUrl;
+            const previewCard = document.getElementById('lobby-card-preview');
+            const previewImg = document.getElementById('preview-img');
+            if(imgUrl && previewCard && previewImg){ previewImg.src = imgUrl; previewCard.style.display = 'block'; setTimeout(()=>{ previewCard.style.display = 'none'; previewImg.src = ''; }, 3500); }
+          }
+          else if(action === 'edit-commander'){
+            const currentName = roomData.players[targetPlayer]?.commanderName || roomData.players[targetPlayer]?.commander || '';
+            openEditCommanderModal(currentName);
+          }
+          else if(action === 'cmd-target-add'){
+            const t = btn.dataset.target; const opp = btn.dataset.opp;
+            // Update opponent's outgoing to target (opp -> t) by +1
+            await updateCmdDamageForTarget(opp, t, +1);
+          }
+          else if(action === 'cmd-target-sub'){
+            const t = btn.dataset.target; const opp = btn.dataset.opp;
+            await updateCmdDamageForTarget(opp, t, -1);
+          }
+          else if(action === 'infect-add'){
+            const t = btn.dataset.player; await updateInfect(t, +1);
+          }
+          else if(action === 'infect-sub'){
+            const t = btn.dataset.player; await updateInfect(t, -1);
+          }
+        });
+      });
 
-                                <div style="margin-top:8px">
-                                    <div class="cmd-block">
-                                        ${cmdBlockInner}
-                                    </div>
+      // inputs for direct edits (opp -> target)
+      document.querySelectorAll('.cmd-target-input').forEach(input => {
+        input.addEventListener('change', async (e) => {
+          if (input.disabled) return;
+          const target = input.dataset.target;
+          const opp = input.dataset.opp;
+          const val = parseInt(input.value) || 0;
+          await updateCmdDamageForTargetDirectly(opp, target, val);
+        });
+      });
 
-                                    <div class="infect-block" style="margin-top:8px">
-                                        ${infectControlsHtml}
-                                    </div>
+      // chat submit
+      const chatForm = document.getElementById('chat-input-form');
+      if(chatForm){
+        chatForm.addEventListener('submit', (e)=>{
+          e.preventDefault();
+          const input = document.getElementById('chat-message-input');
+          const message = input.value.trim();
+          if(message){ sendChatMessage(message, currentPlayerName); input.value = ''; }
+        });
+      }
 
-                                </div>
-                            </div>
+      document.getElementById('roll-dice-btn').addEventListener('click', ()=>{ const roll = Math.floor(Math.random()*20)+1; document.getElementById('roll-result').textContent = roll; });
 
-                            <div style="min-width:220px;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
-                                <div class="controls" style="flex-direction:column;width:100%">
-                                    <div style="display:flex;gap:8px;width:100%">
-                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-5" ${isMe ? '' : 'disabled'}>-5</button>
-                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-1" ${isMe ? '' : 'disabled'}>-1</button>
-                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+1" ${isMe ? '' : 'disabled'}>+1</button>
-                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+5" ${isMe ? '' : 'disabled'}>+5</button>
-                                    </div>
-                                    <div style="display:flex;gap:8px;width:100%">
-                                        <button class="control-btn" data-action="cmd-toggle" data-player="${playerId}">CMD DMG</button>
-                                        ${!isMe ? `<button class="control-btn preview" data-action="show-commander" data-player="${playerId}">Preview</button>` : ''}
-                                        ${isMe ? `<button class="control-btn" data-action="edit-commander" data-player="${playerId}">Edit Commander</button>` : ''}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+      document.getElementById('card-search-btn').addEventListener('click', ()=>{
+        const modal = document.getElementById('card-search-modal'); modal.style.display = 'flex'; modal.setAttribute('aria-hidden','false'); document.getElementById('modal-card-name').value = ''; document.getElementById('search-results').innerHTML = '';
+      });
 
-                        <div class="cmd-controls" id="cmd-controls-${playerId}">
-                            <div style="display:flex;flex-direction:column;gap:8px">
-                                <div style="font-weight:700;color:var(--muted);font-size:0.9em">Edit this player's commander damage values</div>
-                                <div class="per-opp-container" id="per-opp-${playerId}">
-                                    ${perOppRows}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            html += `</div>`; // player-grid
+      document.getElementById('restart-game-btn').addEventListener('click', async ()=>{ if(!confirm("Restart game: reset all players' life to default and clear all commander damage and infect?")) return; await restartGame(); });
 
-            // chat + tools
-            html += `
-                <div id="lobby-features">
-                    <div style="flex:1;min-width:260px">
-                        <div style="display:flex;gap:8px;align-items:center">
-                            <button id="roll-dice-btn" class="btn-secondary">Roll D20</button>
-                            <div id="roll-result" style="font-weight:800;color:var(--text);margin-left:8px">-</div>
-                        </div>
-                    </div>
-                    <div style="min-width:320px">
-                        <div id="chat-container">
-                            <div style="font-weight:700;color:var(--text);margin-bottom:8px">Game Chat</div>
-                            <div id="chat-log"></div>
-                            <form id="chat-input-form" style="display:flex;gap:8px;margin-top:8px">
-                                <input type="text" id="chat-message-input" placeholder="Type message..." maxlength="150" required>
-                                <button type="submit" class="btn-primary">Send</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
+      document.getElementById('share-invite-btn').addEventListener('click', ()=>{
+        const roomUrl = `${window.location.origin}${window.location.pathname}?roomID=${roomId}`;
+        if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(roomUrl).then(()=> alert(`Invite link copied to clipboard: ${roomUrl}`)).catch(err=>console.error(err)); }
+        else { prompt(`Invite link (Copy Manually):`, roomUrl); }
+      });
 
-                <div id="room-footer">
-                    <div class="muted">This view is styled for quick tabletop play. Your state is saved to the room in Firebase.</div>
-                    <div class="muted">Tip: Use Card Search to post a card to chat; hover the card name to preview it on the right.</div>
-                </div>
-            `;
+      document.getElementById('leave-room-btn').addEventListener('click', ()=>{
+        if(unsubscribe) unsubscribe(); roomId = null; window.history.pushState({}, document.title, window.location.pathname); navigateTo('home');
+      });
 
-            appContainer.innerHTML = html;
+      // modal autocomplete wiring
+      const modalCardNameInput = document.getElementById('modal-card-name');
+      const modalSuggestionsList = document.getElementById('modal-suggestions-list');
+      let modalAutocompleteTimeout = null;
+      modalCardNameInput.addEventListener('input', ()=>{
+        const query = modalCardNameInput.value.trim();
+        if(modalAutocompleteTimeout) clearTimeout(modalAutocompleteTimeout);
+        if(query.length >= 2) modalAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name'), AUTOCOMPLETE_DEBOUNCE_MS);
+        else modalSuggestionsList.innerHTML = '';
+      });
 
-            // render chat
-            renderChat(roomData.chatLog || [], currentPlayerName);
+      document.addEventListener('click', (e)=>{});
+    }
 
-            // reapply openCmdControls state after render
-            const playerIdsAfter = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
-                ? [...roomData.playersOrder]
-                : Object.keys(roomData.players || {});
-            // ensure current user first if present
-            if (playerIdsAfter.includes(userId)) {
-                const idx = playerIdsAfter.indexOf(userId);
-                if (idx > 0) { playerIdsAfter.splice(idx,1); playerIdsAfter.unshift(userId); }
-            }
+    // CHAT & DATA HELPERS
+    async function sendChatMessage(message, senderName){
+      if(!roomId || !userId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      const chatMessage = { senderId: userId, senderName, message, timestamp: Date.now() };
+      try{ await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true }); }
+      catch(e){ console.error("Error sending chat message:", e); }
+    }
 
-            playerIdsAfter.forEach(pid => {
-                const controls = document.getElementById(`cmd-controls-${pid}`);
-                if(controls){
-                    if(openCmdControls.has(pid)) controls.classList.add('open');
-                    else controls.classList.remove('open');
-                }
-            });
+    async function postSystemCardToChat(cardName, imageUrl){
+      if(!roomId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      const chatMessage = { senderId: 'system', senderName: 'System', message: cardName, cardImageUrl: imageUrl, timestamp: Date.now() };
+      try{ await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true }); }
+      catch(e){ console.error("Error posting system card to chat:", e); }
+    }
 
-            // attach listeners for controls
-            document.querySelectorAll('.control-btn').forEach(btn=>{
-                btn.addEventListener('click', async (e)=>{
-                    if (btn.disabled) return; // ignore disabled controls
-                    const action = btn.dataset.action;
-                    const targetPlayer = btn.dataset.player;
-                    const delta = parseInt(btn.dataset.delta || '0');
+    async function updateLifeForPlayer(targetPlayerId, delta){
+      if(!roomId || !userId) return;
+      if(targetPlayerId !== userId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const snap = await getDoc(ref);
+        if(!snap.exists()) return;
+        const data = snap.data();
+        const players = data.players || {};
+        const target = players[targetPlayerId] || {};
+        const cur = target.life ?? getStartingLife();
+        const newLife = cur + delta;
+        target.life = newLife;
+        await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
+      }catch(e){ console.error("Error updating life for player:", e); }
+    }
 
-                    if(action === 'life'){
-                        await updateLifeForPlayer(targetPlayer, delta);
-                    } else if(action === 'cmd-toggle'){
-                        const controls = document.getElementById(`cmd-controls-${targetPlayer}`);
-                        if(!controls) return;
-                        const isOpen = controls.classList.toggle('open');
-                        if(isOpen) openCmdControls.add(targetPlayer);
-                        else openCmdControls.delete(targetPlayer);
-                    } else if(action === 'show-commander'){
-                        const imgUrl = roomData.players[targetPlayer]?.commanderImageUrl;
-                        const previewCard = document.getElementById('lobby-card-preview');
-                        const previewImg = document.getElementById('preview-img');
-                        if(imgUrl && previewCard && previewImg){
-                            previewImg.src = imgUrl;
-                            previewCard.style.display = 'block';
-                            setTimeout(()=>{ previewCard.style.display = 'none'; previewImg.src = ''; }, 3500);
-                        }
-                    } else if(action === 'edit-commander'){
-                        const currentName = roomData.players[targetPlayer]?.commanderName || roomData.players[targetPlayer]?.commander || '';
-                        openEditCommanderModal(currentName);
-                    } else if(action === 'cmd-target-add'){
-                        const t = btn.dataset.target;
-                        const opp = btn.dataset.opp;
-                        await updateCmdDamageForTarget(t, opp, +1);
-                    } else if(action === 'cmd-target-sub'){
-                        const t = btn.dataset.target;
-                        const opp = btn.dataset.opp;
-                        await updateCmdDamageForTarget(t, opp, -1);
-                    } else if(action === 'infect-add'){
-                        const t = btn.dataset.player;
-                        await updateInfect(t, +1);
-                    } else if(action === 'infect-sub'){
-                        const t = btn.dataset.player;
-                        await updateInfect(t, -1);
-                    }
-                });
-            });
+    async function updateInfect(targetPlayerId, delta){
+      if(!roomId || !userId) return;
+      if(targetPlayerId !== userId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const snap = await getDoc(ref);
+        if(!snap.exists()) return;
+        const data = snap.data();
+        const players = data.players || {};
+        const target = players[targetPlayerId] || {};
+        const cur = target.infect || 0;
+        const newVal = Math.max(0, cur + delta);
+        target.infect = newVal;
+        await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
+      }catch(e){ console.error("Error updating infect:", e); }
+    }
 
-            // attach inputs for per-target direct edits (static rows)
-            document.querySelectorAll('.cmd-target-input').forEach(input => {
-                input.addEventListener('change', async (e) => {
-                    if (input.disabled) return;
-                    const target = input.dataset.target;
-                    const opp = input.dataset.opp;
-                    const val = parseInt(input.value) || 0;
-                    await updateCmdDamageForTargetDirectly(target, opp, val);
-                });
-            });
+    // IMPORTANT: updateCmdDamageForTarget now updates opponent's outgoing to target (oppId -> targetPlayerId)
+    async function updateCmdDamageForTarget(oppId, targetPlayerId, delta){
+      if(!roomId || !userId) return;
+      // only allow editing incoming values for yourself (targetPlayerId must be you)
+      if(targetPlayerId !== userId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const snap = await getDoc(ref);
+        if(!snap.exists()) return;
+        const data = snap.data();
+        const players = data.players || {};
+        const opponent = players[oppId] || {};
+        const dmgMap = opponent.commanderDamage || {};
+        const cur = dmgMap[targetPlayerId] || 0;
+        const newVal = Math.max(0, cur + delta);
+        dmgMap[targetPlayerId] = newVal;
+        opponent.commanderDamage = dmgMap;
+        // write back opponent's updated map
+        await setDoc(ref, { players: { [oppId]: opponent }, lastActive: serverTimestamp() }, { merge: true });
+      }catch(e){ console.error("Error updating commander damage for target (opp -> target):", e); }
+    }
 
-            // chat submit
-            const chatForm = document.getElementById('chat-input-form');
-            if(chatForm){
-                chatForm.addEventListener('submit', (e)=>{
-                    e.preventDefault();
-                    const input = document.getElementById('chat-message-input');
-                    const message = input.value.trim();
-                    if(message){ sendChatMessage(message, currentPlayerName); input.value = ''; }
-                });
-            }
+    // direct set: oppId -> targetPlayerId = newValue
+    async function updateCmdDamageForTargetDirectly(oppId, targetPlayerId, newValue){
+      if(!roomId || !userId) return;
+      if(targetPlayerId !== userId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const snap = await getDoc(ref);
+        if(!snap.exists()) return;
+        const data = snap.data();
+        const players = data.players || {};
+        const opponent = players[oppId] || {};
+        const dmgMap = opponent.commanderDamage || {};
+        dmgMap[targetPlayerId] = Math.max(0, parseInt(newValue) || 0);
+        opponent.commanderDamage = dmgMap;
+        await setDoc(ref, { players: { [oppId]: opponent }, lastActive: serverTimestamp() }, { merge: true });
+      }catch(e){ console.error("Error setting commander damage for target directly (opp -> target):", e); }
+    }
 
-            // roll dice
-            document.getElementById('roll-dice-btn').addEventListener('click', ()=>{
-                const roll = Math.floor(Math.random()*20)+1;
-                document.getElementById('roll-result').textContent = roll;
-            });
+    async function restartGame(){
+      if(!roomId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const snap = await getDoc(ref);
+        if(!snap.exists()) return;
+        const data = snap.data();
+        const players = data.players || {};
+        const updates = {};
+        Object.keys(players).forEach(pid=>{
+          updates[pid] = { ...players[pid], life: getStartingLife(), commanderDamage: {}, infect: 0 };
+        });
+        await setDoc(ref, { players: updates, lastActive: serverTimestamp() }, { merge: true });
+        alert("Game restarted: life reset, commander damage and infect cleared.");
+      }catch(e){ console.error("Failed to restart game:", e); alert("Failed to restart game. Check console."); }
+    }
 
-            // card search modal
-            document.getElementById('card-search-btn').addEventListener('click', ()=>{
-                const modal = document.getElementById('card-search-modal');
-                modal.style.display = 'flex';
-                modal.setAttribute('aria-hidden','false');
-                document.getElementById('modal-card-name').value = '';
-                document.getElementById('search-results').innerHTML = '';
-            });
+    function openEditCommanderModal(prefillName=''){
+      const modal = document.getElementById('edit-commander-modal');
+      modal.style.display = 'flex'; modal.setAttribute('aria-hidden','false');
+      document.getElementById('edit-commander-name').value = prefillName;
+      document.getElementById('edit-commander-result').innerHTML = '';
+      const input = document.getElementById('edit-commander-name');
+      const suggestions = document.getElementById('edit-commander-suggestions');
+      let editAutocompleteTimeout = null;
+      function cleanup(){ input.removeEventListener('input', onInput); document.getElementById('edit-commander-cancel').onclick = null; document.getElementById('edit-commander-save').onclick = null; suggestions.innerHTML = ''; }
+      function onInput(){ const q = input.value.trim(); if(editAutocompleteTimeout) clearTimeout(editAutocompleteTimeout); if(q.length >= 2) editAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(q, 'edit-commander-suggestions', 'edit-commander-name'), AUTOCOMPLETE_DEBOUNCE_MS); else suggestions.innerHTML = ''; }
+      input.addEventListener('input', onInput);
+      document.getElementById('edit-commander-cancel').onclick = ()=>{ modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); cleanup(); };
+      document.getElementById('edit-commander-save').onclick = async ()=>{
+        const name = input.value.trim(); const resultDiv = document.getElementById('edit-commander-result');
+        if(!name){ resultDiv.textContent = "Please enter a commander name."; return; }
+        resultDiv.textContent = "Validating...";
+        const validation = await validateCommander(name);
+        if(!validation){ resultDiv.textContent = `Commander "${name}" not found on Scryfall.`; return; }
+        try{
+          const ref = doc(db, ROOM_COLLECTION, roomId);
+          const snap = await getDoc(ref);
+          if(!snap.exists()){ resultDiv.textContent = "Room no longer exists."; return; }
+          const data = snap.data();
+          const players = data.players || {};
+          const me = players[userId] || {};
+          me.commanderName = validation.validatedName;
+          me.commanderImageUrl = validation.imageUrl;
+          await setDoc(ref, { players: { [userId]: me }, lastActive: serverTimestamp() }, { merge: true });
+          resultDiv.textContent = "Commander updated.";
+          setTimeout(()=>{ modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); cleanup(); }, 700);
+        }catch(e){ console.error("Failed to save commander edit:", e); resultDiv.textContent = "Failed to save. Check console."; }
+      };
+    }
 
-            // restart game
-            document.getElementById('restart-game-btn').addEventListener('click', async ()=>{
-                if(!confirm("Restart game: reset all players' life to default and clear all commander damage and infect?")) return;
-                await restartGame();
-            });
+    // ROOM CREATION / JOIN / LISTEN
+    function promptPassword(rid, mode){
+      const appContainer = document.getElementById("app-container");
+      const title = mode === 'join' ? `Join Room: ${rid}` : `Create Room: ${rid}`;
+      const btnText = mode === 'join' ? "Enter Game" : "Create Room";
+      document.getElementById('lobby-card-preview').style.display = 'none';
+      document.getElementById('card-search-modal').style.display = 'none';
 
-            // share invite
-            document.getElementById('share-invite-btn').addEventListener('click', ()=>{
-                const roomUrl = `${window.location.origin}${window.location.pathname}?roomID=${roomId}`;
-                if(navigator.clipboard && navigator.clipboard.writeText){
-                    navigator.clipboard.writeText(roomUrl).then(()=> alert(`Invite link copied to clipboard: ${roomUrl}`)).catch(err=>console.error(err));
-                } else { prompt(`Invite link (Copy Manually):`, roomUrl); }
-            });
+      appContainer.innerHTML = `
+        <h2 style="color:var(--text);margin-top:0">${title}</h2>
+        <input type="text" id="player-name-input" placeholder="Your Player Name">
+        <div style="position:relative">
+          <input type="text" id="commander-input" placeholder="Your Commander's Name (Required)" autocomplete="off">
+          <div id="suggestions-list" class="suggestions-list"></div>
+        </div>
+        <input type="password" id="pwd-input" placeholder="Room Password">
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="action-btn" class="btn-primary">${btnText}</button>
+          <button id="cancel-btn" class="btn-danger">Cancel</button>
+        </div>
+        <p id="err-msg" style="color:#ff5555"></p>
+      `;
 
-            // leave room
-            document.getElementById('leave-room-btn').addEventListener('click', ()=>{
-                if(unsubscribe) unsubscribe();
-                roomId = null;
-                window.history.pushState({}, document.title, window.location.pathname);
-                navigateTo('home');
-            });
+      const commanderInput = document.getElementById('commander-input');
+      const suggestionsList = document.getElementById('suggestions-list');
 
-            // modal autocomplete wiring for card search
-            const modalCardNameInput = document.getElementById('modal-card-name');
-            const modalSuggestionsList = document.getElementById('modal-suggestions-list');
-            let modalAutocompleteTimeout = null;
-            modalCardNameInput.addEventListener('input', ()=>{
-                const query = modalCardNameInput.value.trim();
-                if(modalAutocompleteTimeout) clearTimeout(modalAutocompleteTimeout);
-                if(query.length >= 2) modalAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name'), AUTOCOMPLETE_DEBOUNCE_MS);
-                else modalSuggestionsList.innerHTML = '';
-            });
+      commanderInput.addEventListener('input', ()=>{
+        const query = commanderInput.value.trim();
+        if(autocompleteTimeout) clearTimeout(autocompleteTimeout);
+        if(query.length >= 2) autocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(query, 'suggestions-list', 'commander-input'), AUTOCOMPLETE_DEBOUNCE_MS);
+        else suggestionsList.innerHTML = '';
+      });
 
-            // keep cmd-controls open until toggled
-            document.addEventListener('click', (e)=>{});
-        }
+      document.addEventListener('click', (e)=>{
+        if(suggestionsList && !commanderInput.contains(e.target) && !suggestionsList.contains(e.target)) suggestionsList.innerHTML = '';
+      });
 
-        // ----------------------------------------------------------------------
-        // CHAT & DATA HELPERS
-        // ----------------------------------------------------------------------
-        async function sendChatMessage(message, senderName){
-            if(!roomId || !userId) return;
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            const chatMessage = { senderId: userId, senderName, message, timestamp: Date.now() };
-            try{ await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true }); }
-            catch(e){ console.error("Error sending chat message:", e); }
-        }
+      document.getElementById("cancel-btn").onclick = ()=>{ window.history.pushState({}, document.title, window.location.pathname); navigateTo('home'); };
 
-        async function postSystemCardToChat(cardName, imageUrl){
-            if(!roomId) return;
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            const chatMessage = { senderId: 'system', senderName: 'System', message: cardName, cardImageUrl: imageUrl, timestamp: Date.now() };
-            try{ await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true }); }
-            catch(e){ console.error("Error posting system card to chat:", e); }
-        }
+      document.getElementById("action-btn").onclick = async ()=>{
+        const name = document.getElementById("player-name-input").value.trim();
+        const commander = document.getElementById("commander-input").value.trim();
+        const pwd = document.getElementById("pwd-input").value;
+        const errMsg = document.getElementById("err-msg");
+        const actionBtn = document.getElementById("action-btn");
+        if(!name || !pwd || !commander){ errMsg.textContent = "Player Name, Commander, and Password are required."; return; }
+        errMsg.textContent = "Verifying commander and joining...";
+        actionBtn.disabled = true;
 
-        async function updateLifeForPlayer(targetPlayerId, delta){
-            if(!roomId || !userId) return;
-            if(targetPlayerId !== userId) return; // only allow editing your own life
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            try{
-                const snap = await getDoc(ref);
-                if(!snap.exists()) return;
-                const data = snap.data();
-                const players = data.players || {};
-                const target = players[targetPlayerId] || {};
-                const cur = target.life ?? getStartingLife();
-                const newLife = cur + delta;
-                target.life = newLife;
-                await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
-            }catch(e){ console.error("Error updating life for player:", e); }
-        }
+        const validationResult = await validateCommander(commander);
+        if(!validationResult){ errMsg.textContent = `Commander "${commander}" not found on Scryfall. Please check spelling or use the Card Search tool.`; actionBtn.disabled = false; return; }
+        const { validatedName, imageUrl } = validationResult;
 
-        async function updateInfect(targetPlayerId, delta){
-            if(!roomId || !userId) return;
-            if(targetPlayerId !== userId) return; // only allow editing your own infect
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            try{
-                const snap = await getDoc(ref);
-                if(!snap.exists()) return;
-                const data = snap.data();
-                const players = data.players || {};
-                const target = players[targetPlayerId] || {};
-                const cur = target.infect || 0;
-                const newVal = Math.max(0, cur + delta);
-                target.infect = newVal;
-                await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
-            }catch(e){ console.error("Error updating infect:", e); }
-        }
-
-        async function updateCmdDamageForTarget(targetPlayerId, oppId, delta){
-            if(!roomId || !userId) return;
-            if(targetPlayerId !== userId) return; // only allow editing your own player's commander damage values
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            try{
-                const snap = await getDoc(ref);
-                if(!snap.exists()) return;
-                const data = snap.data();
-                const players = data.players || {};
-                const target = players[targetPlayerId] || {};
-                const dmgMap = target.commanderDamage || {};
-                const cur = dmgMap[oppId] || 0;
-                const newVal = Math.max(0, cur + delta);
-                dmgMap[oppId] = newVal;
-                target.commanderDamage = dmgMap;
-                await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
-            }catch(e){ console.error("Error updating commander damage for target:", e); }
-        }
-
-        async function updateCmdDamageForTargetDirectly(targetPlayerId, oppId, newValue){
-            if(!roomId || !userId) return;
-            if(targetPlayerId !== userId) return; // only allow editing your own player's commander damage values
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            try{
-                const snap = await getDoc(ref);
-                if(!snap.exists()) return;
-                const data = snap.data();
-                const players = data.players || {};
-                const target = players[targetPlayerId] || {};
-                const dmgMap = target.commanderDamage || {};
-                dmgMap[oppId] = Math.max(0, parseInt(newValue) || 0);
-                target.commanderDamage = dmgMap;
-                await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp() }, { merge: true });
-            }catch(e){ console.error("Error setting commander damage for target directly:", e); }
-        }
-
-        // ----------------------------------------------------------------------
-        // RESTART GAME: reset life and clear commanderDamage and infect for all players
-        // ----------------------------------------------------------------------
-        async function restartGame(){
-            if(!roomId) return;
-            const ref = doc(db, ROOM_COLLECTION, roomId);
-            try{
-                const snap = await getDoc(ref);
-                if(!snap.exists()) return;
-                const data = snap.data();
-                const players = data.players || {};
-                const updates = {};
-                Object.keys(players).forEach(pid=>{
-                    updates[pid] = {
-                        ...players[pid],
-                        life: getStartingLife(),
-                        commanderDamage: {},
-                        infect: 0
-                    };
-                });
-                await setDoc(ref, { players: updates, lastActive: serverTimestamp() }, { merge: true });
-                alert("Game restarted: life reset, commander damage and infect cleared.");
-            }catch(e){ console.error("Failed to restart game:", e); alert("Failed to restart game. Check console."); }
-        }
-
-        // ----------------------------------------------------------------------
-        // EDIT COMMANDER: modal flow
-        // ----------------------------------------------------------------------
-        function openEditCommanderModal(prefillName=''){
-            const modal = document.getElementById('edit-commander-modal');
-            modal.style.display = 'flex';
-            modal.setAttribute('aria-hidden','false');
-            document.getElementById('edit-commander-name').value = prefillName;
-            document.getElementById('edit-commander-result').innerHTML = '';
-            const input = document.getElementById('edit-commander-name');
-            const suggestions = document.getElementById('edit-commander-suggestions');
-            let editAutocompleteTimeout = null;
-
-            function cleanup(){
-                input.removeEventListener('input', onInput);
-                document.getElementById('edit-commander-cancel').onclick = null;
-                document.getElementById('edit-commander-save').onclick = null;
-                suggestions.innerHTML = '';
-            }
-
-            function onInput(){
-                const q = input.value.trim();
-                if(editAutocompleteTimeout) clearTimeout(editAutocompleteTimeout);
-                if(q.length >= 2) editAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(q, 'edit-commander-suggestions', 'edit-commander-name'), AUTOCOMPLETE_DEBOUNCE_MS);
-                else suggestions.innerHTML = '';
-            }
-
-            input.addEventListener('input', onInput);
-
-            document.getElementById('edit-commander-cancel').onclick = ()=>{
-                modal.style.display = 'none';
-                modal.setAttribute('aria-hidden','true');
-                cleanup();
-            };
-
-            document.getElementById('edit-commander-save').onclick = async ()=>{
-                const name = input.value.trim();
-                const resultDiv = document.getElementById('edit-commander-result');
-                if(!name){ resultDiv.textContent = "Please enter a commander name."; return; }
-                resultDiv.textContent = "Validating...";
-                const validation = await validateCommander(name);
-                if(!validation){ resultDiv.textContent = `Commander "${name}" not found on Scryfall.`; return; }
-                try{
-                    const ref = doc(db, ROOM_COLLECTION, roomId);
-                    const snap = await getDoc(ref);
-                    if(!snap.exists()){ resultDiv.textContent = "Room no longer exists."; return; }
-                    const data = snap.data();
-                    const players = data.players || {};
-                    const me = players[userId] || {};
-                    me.commanderName = validation.validatedName;
-                    me.commanderImageUrl = validation.imageUrl;
-                    await setDoc(ref, { players: { [userId]: me }, lastActive: serverTimestamp() }, { merge: true });
-                    resultDiv.textContent = "Commander updated.";
-                    setTimeout(()=>{ modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); cleanup(); }, 700);
-                }catch(e){ console.error("Failed to save commander edit:", e); resultDiv.textContent = "Failed to save. Check console."; }
-            };
-        }
-
-        // ----------------------------------------------------------------------
-        // ROOM CREATION / JOIN / LISTEN
-        // ----------------------------------------------------------------------
-        function promptPassword(rid, mode){
-            const appContainer = document.getElementById("app-container");
-            const title = mode === 'join' ? `Join Room: ${rid}` : `Create Room: ${rid}`;
-            const btnText = mode === 'join' ? "Enter Game" : "Create Room";
-            document.getElementById('lobby-card-preview').style.display = 'none';
-            document.getElementById('card-search-modal').style.display = 'none';
-
-            appContainer.innerHTML = `
-                <h2 style="color:var(--text);margin-top:0">${title}</h2>
-                <input type="text" id="player-name-input" placeholder="Your Player Name">
-                <div style="position:relative">
-                    <input type="text" id="commander-input" placeholder="Your Commander's Name (Required)" autocomplete="off">
-                    <div id="suggestions-list" class="suggestions-list"></div>
-                </div>
-                <input type="password" id="pwd-input" placeholder="Room Password">
-                <div style="display:flex;gap:8px;margin-top:8px">
-                    <button id="action-btn" class="btn-primary">${btnText}</button>
-                    <button id="cancel-btn" class="btn-danger">Cancel</button>
-                </div>
-                <p id="err-msg" style="color:#ff5555"></p>
-            `;
-
-            const commanderInput = document.getElementById('commander-input');
-            const suggestionsList = document.getElementById('suggestions-list');
-
-            commanderInput.addEventListener('input', ()=>{
-                const query = commanderInput.value.trim();
-                if(autocompleteTimeout) clearTimeout(autocompleteTimeout);
-                if(query.length >= 2) autocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(query, 'suggestions-list', 'commander-input'), AUTOCOMPLETE_DEBOUNCE_MS);
-                else suggestionsList.innerHTML = '';
-            });
-
-            document.addEventListener('click', (e)=>{
-                if(suggestionsList && !commanderInput.contains(e.target) && !suggestionsList.contains(e.target)) suggestionsList.innerHTML = '';
-            });
-
-            document.getElementById("cancel-btn").onclick = ()=>{
-                window.history.pushState({}, document.title, window.location.pathname);
-                navigateTo('home');
-            };
-
-            document.getElementById("action-btn").onclick = async ()=>{
-                const name = document.getElementById("player-name-input").value.trim();
-                const commander = document.getElementById("commander-input").value.trim();
-                const pwd = document.getElementById("pwd-input").value;
-                const errMsg = document.getElementById("err-msg");
-                const actionBtn = document.getElementById("action-btn");
-                if(!name || !pwd || !commander){ errMsg.textContent = "Player Name, Commander, and Password are required."; return; }
-                errMsg.textContent = "Verifying commander and joining...";
-                actionBtn.disabled = true;
-
-                const validationResult = await validateCommander(commander);
-                if(!validationResult){
-                    errMsg.textContent = `Commander "${commander}" not found on Scryfall. Please check spelling or use the Card Search tool.`;
-                    actionBtn.disabled = false;
-                    return;
-                }
-                const { validatedName, imageUrl } = validationResult;
-
-                const ref = doc(db, ROOM_COLLECTION, rid);
-                const snap = await getDoc(ref);
-                if(mode === 'join'){
-                    if(snap.exists()){
-                        const data = snap.data();
-                        if (await checkAndDeleteIfExpired(rid, data)) {
-                            errMsg.textContent = "Room expired and was deleted.";
-                            actionBtn.disabled = false;
-                            setTimeout(()=> navigateTo('home'),2000);
-                            return;
-                        }
-                        if(data.passwordHash === hashPassword(pwd)){
-                            try {
-                                const playerObj = {
-                                    life: getStartingLife(),
-                                    commanderDamage: {},
-                                    infect: 0,
-                                    name,
-                                    commanderName: validatedName,
-                                    commanderImageUrl: imageUrl
-                                };
-                                // append to playersOrder so join order is preserved
-                                await updateDoc(ref, {
-                                    ['players.' + userId]: playerObj,
-                                    playersOrder: arrayUnion(userId),
-                                    lastActive: serverTimestamp()
-                                });
-                                listenToRoom(rid);
-                            } catch (e) {
-                                console.error("Failed to add joining player:", e);
-                                errMsg.textContent = "Failed to join room. Try again.";
-                                actionBtn.disabled = false;
-                            }
-                        } else {
-                            errMsg.textContent = "Wrong password.";
-                            actionBtn.disabled = false;
-                        }
-                    } else {
-                        errMsg.textContent = "Room no longer exists.";
-                        actionBtn.disabled = false;
-                    }
-                } else {
-                    if(pwd.length < 3){
-                        errMsg.textContent = "Password too short.";
-                        actionBtn.disabled = false;
-                        return;
-                    }
-                    try {
-                        await createRoom(rid, pwd, name, validatedName, imageUrl);
-                    } catch (e) {
-                        console.error("Create room failed:", e);
-                        errMsg.textContent = "Failed to create room. Try again.";
-                        actionBtn.disabled = false;
-                    }
-                }
-            };
-        }
-
-        async function createRoom(rid, pwd, name, commanderName, commanderImageUrl){
-            if(!userId) return;
-            const ref = doc(db, ROOM_COLLECTION, rid);
-            try{
-                await setDoc(ref, {
-                    ownerId: userId,
-                    passwordHash: hashPassword(pwd),
-                    createdAt: serverTimestamp(),
-                    lastActive: serverTimestamp(),
-                    chatLog: [],
-                    playersOrder: [userId], // stable join order
-                    players: {
-                        [userId]: {
-                            life: getStartingLife(),
-                            commanderDamage: {},
-                            infect: 0,
-                            name,
-                            commanderName,
-                            commanderImageUrl
-                        }
-                    }
-                });
+        const ref = doc(db, ROOM_COLLECTION, rid);
+        const snap = await getDoc(ref);
+        if(mode === 'join'){
+          if(snap.exists()){
+            const data = snap.data();
+            if (await checkAndDeleteIfExpired(rid, data)) { errMsg.textContent = "Room expired and was deleted."; actionBtn.disabled = false; setTimeout(()=> navigateTo('home'),2000); return; }
+            if(data.passwordHash === hashPassword(pwd)){
+              try {
+                const playerObj = { life: getStartingLife(), commanderDamage: {}, infect: 0, name, commanderName: validatedName, commanderImageUrl: imageUrl };
+                await updateDoc(ref, { ['players.' + userId]: playerObj, playersOrder: arrayUnion(userId), lastActive: serverTimestamp() });
                 listenToRoom(rid);
-            }catch(e){ console.error(e); throw e; }
+              } catch (e) { console.error("Failed to add joining player:", e); errMsg.textContent = "Failed to join room. Try again."; actionBtn.disabled = false; }
+            } else { errMsg.textContent = "Wrong password."; actionBtn.disabled = false; }
+          } else { errMsg.textContent = "Room no longer exists."; actionBtn.disabled = false; }
+        } else {
+          if(pwd.length < 3){ errMsg.textContent = "Password too short."; actionBtn.disabled = false; return; }
+          try { await createRoom(rid, pwd, name, validatedName, imageUrl); } catch (e) { console.error("Create room failed:", e); errMsg.textContent = "Failed to create room. Try again."; actionBtn.disabled = false; }
         }
+      };
+    }
 
-        function listenToRoom(rid, newName=null, newCommanderName=null, newCommanderImageUrl=null){
-            if(unsubscribe) unsubscribe();
-            const ref = doc(db, ROOM_COLLECTION, rid);
-            unsubscribe = onSnapshot(ref, (snap)=>{
-                if(snap.exists()){
-                    roomId = rid;
-                    const data = snap.data();
-                    if(!data.players[userId]){
-                        if(newName && newCommanderName && newCommanderImageUrl){
-                            setDoc(ref, {
-                                players: {
-                                    [userId]: {
-                                        life: getStartingLife(),
-                                        commanderDamage: {},
-                                        infect: 0,
-                                        name: newName,
-                                        commanderName: newCommanderName,
-                                        commanderImageUrl: newCommanderImageUrl
-                                    }
-                                },
-                                lastActive: serverTimestamp()
-                            }, { merge: true });
-                        } else { renderSetupView(); return; }
-                    }
-                    renderRoomView(data);
-                } else { renderSetupView(); }
-            });
-        }
-
-        // ----------------------------------------------------------------------
-        // ADMIN / MISC
-        // ----------------------------------------------------------------------
-        async function deleteAllRooms(){
-            const password = prompt("Enter the global deletion password to confirm this action:");
-            if(password !== DELETE_ALL_PWD){ alert("Incorrect password. All rooms were NOT deleted."); return; }
-            if(!confirm("LAST WARNING: Are you absolutely sure you want to delete ALL rooms? This cannot be undone.")) return;
-            document.getElementById("status-message").textContent = "Deleting all rooms...";
-            const roomsRef = collection(db, ROOM_COLLECTION);
-            try{
-                const snapshot = await getDocs(roomsRef);
-                let deleteCount = 0;
-                for(const docSnapshot of snapshot.docs){
-                    await deleteDoc(doc(db, ROOM_COLLECTION, docSnapshot.id));
-                    deleteCount++;
-                }
-                alert(`Success! Deleted ${deleteCount} room(s).`);
-                renderSetupView();
-            }catch(e){ console.error("Failed to delete all rooms:", e); alert("An error occurred during bulk deletion. Check the console."); }
-        }
-
-        async function deleteRoom(id){
-            if(!id) return;
-            try{ await deleteDoc(doc(db, ROOM_COLLECTION, id)); if(unsubscribe) unsubscribe(); roomId = null; renderSetupView(); }
-            catch(e){ alert("Failed to delete room. Check console for details."); console.error("Delete room failed:", e); }
-        }
-
-        // ----------------------------------------------------------------------
-        // CARD SEARCH MODAL: post to chat as System and show right preview on hover
-        // ----------------------------------------------------------------------
-        const modalCardNameInput = document.getElementById('modal-card-name');
-        const modalSuggestionsList = document.getElementById('modal-suggestions-list');
-        let modalAutocompleteTimeout = null;
-
-        document.getElementById('modal-close-btn').addEventListener('click', ()=>{
-            const modal = document.getElementById('card-search-modal');
-            modal.style.display = 'none';
-            modal.setAttribute('aria-hidden','true');
+    async function createRoom(rid, pwd, name, commanderName, commanderImageUrl){
+      if(!userId) return;
+      const ref = doc(db, ROOM_COLLECTION, rid);
+      try{
+        await setDoc(ref, {
+          ownerId: userId, passwordHash: hashPassword(pwd), createdAt: serverTimestamp(), lastActive: serverTimestamp(),
+          chatLog: [], playersOrder: [userId],
+          players: { [userId]: { life: getStartingLife(), commanderDamage: {}, infect: 0, name, commanderName, commanderImageUrl } }
         });
+        listenToRoom(rid);
+      }catch(e){ console.error(e); throw e; }
+    }
 
-        modalCardNameInput.addEventListener('input', ()=>{
-            const query = modalCardNameInput.value.trim();
-            if(modalAutocompleteTimeout) clearTimeout(modalAutocompleteTimeout);
-            if(query.length >= 2) modalAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name'), AUTOCOMPLETE_DEBOUNCE_MS);
-            else modalSuggestionsList.innerHTML = '';
-        });
+    function listenToRoom(rid, newName=null, newCommanderName=null, newCommanderImageUrl=null){
+      if(unsubscribe) unsubscribe();
+      const ref = doc(db, ROOM_COLLECTION, rid);
+      unsubscribe = onSnapshot(ref, (snap)=>{
+        if(snap.exists()){
+          roomId = rid;
+          const data = snap.data();
+          if(!data.players[userId]){
+            if(newName && newCommanderName && newCommanderImageUrl){
+              setDoc(ref, { players: { [userId]: { life: getStartingLife(), commanderDamage: {}, infect: 0, name: newName, commanderName: newCommanderName, commanderImageUrl: newCommanderImageUrl } }, lastActive: serverTimestamp() }, { merge: true });
+            } else { renderSetupView(); return; }
+          }
+          renderRoomView(data);
+        } else { renderSetupView(); }
+      });
+    }
 
-        document.getElementById('modal-search-btn').addEventListener('click', async ()=>{
-            modalSuggestionsList.innerHTML = '';
-            const cardName = modalCardNameInput.value.trim();
-            const resultsDiv = document.getElementById('search-results');
-            resultsDiv.innerHTML = '<p style="color:var(--text)">Searching...</p>';
-            if(!cardName){ resultsDiv.innerHTML = '<p style="color:var(--text)">Please enter a card name.</p>'; return; }
-            try{
-                const result = await validateCommander(cardName);
-                if(result){
-                    resultsDiv.innerHTML = `<h4 style="color:var(--text);margin:6px 0 8px 0">${result.validatedName}</h4><img src="${result.imageUrl}" alt="${result.validatedName}" style="max-width:100%;border-radius:6px">`;
-                    // Post to chat as System
-                    await postSystemCardToChat(result.validatedName, result.imageUrl);
-                    // close modal after short delay
-                    setTimeout(()=>{ const modal = document.getElementById('card-search-modal'); modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); }, 600);
-                } else { resultsDiv.innerHTML = `<p style="color:var(--text)">Card not found. Check spelling.</p>`; }
-            }catch(e){ resultsDiv.innerHTML = `<p style="color:var(--text)">Error connecting to Scryfall.</p>`; console.error(e); }
-        });
+    async function deleteAllRooms(){
+      const password = prompt("Enter the global deletion password to confirm this action:");
+      if(password !== DELETE_ALL_PWD){ alert("Incorrect password. All rooms were NOT deleted."); return; }
+      if(!confirm("LAST WARNING: Are you absolutely sure you want to delete ALL rooms? This cannot be undone.")) return;
+      document.getElementById("status-message").textContent = "Deleting all rooms...";
+      const roomsRef = collection(db, ROOM_COLLECTION);
+      try{
+        const snapshot = await getDocs(roomsRef);
+        let deleteCount = 0;
+        for(const docSnapshot of snapshot.docs){ await deleteDoc(doc(db, ROOM_COLLECTION, docSnapshot.id)); deleteCount++; }
+        alert(`Success! Deleted ${deleteCount} room(s).`);
+        renderSetupView();
+      }catch(e){ console.error("Failed to delete all rooms:", e); alert("An error occurred during bulk deletion. Check the console."); }
+    }
 
-        // ----------------------------------------------------------------------
-        // INIT: auth + initial route
-        // ----------------------------------------------------------------------
-        function initialRoute(){
-            const params = new URLSearchParams(window.location.search);
-            const idFromURL = params.get('roomID');
-            if(idFromURL){ promptPassword(idFromURL,'join'); setActiveNav('home'); return; }
-            const page = (location.hash || '#home').replace('#','') || 'home';
-            setActiveNav(page);
-            if(page === 'home') renderHome();
-            else if(page === 'changes') renderChanges();
-            else if(page === 'contact') renderContact();
+    async function deleteRoom(id){
+      if(!id) return;
+      try{ await deleteDoc(doc(db, ROOM_COLLECTION, id)); if(unsubscribe) unsubscribe(); roomId = null; renderSetupView(); }
+      catch(e){ alert("Failed to delete room. Check console for details."); console.error("Delete room failed:", e); }
+    }
+
+    // Card search modal wiring
+    const modalCardNameInput = document.getElementById('modal-card-name');
+    const modalSuggestionsList = document.getElementById('modal-suggestions-list');
+    let modalAutocompleteTimeout = null;
+    document.getElementById('modal-close-btn').addEventListener('click', ()=>{ const modal = document.getElementById('card-search-modal'); modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); });
+    modalCardNameInput.addEventListener('input', ()=>{
+      const query = modalCardNameInput.value.trim();
+      if(modalAutocompleteTimeout) clearTimeout(modalAutocompleteTimeout);
+      if(query.length >= 2) modalAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name'), AUTOCOMPLETE_DEBOUNCE_MS);
+      else modalSuggestionsList.innerHTML = '';
+    });
+    document.getElementById('modal-search-btn').addEventListener('click', async ()=>{
+      modalSuggestionsList.innerHTML = '';
+      const cardName = modalCardNameInput.value.trim();
+      const resultsDiv = document.getElementById('search-results');
+      resultsDiv.innerHTML = '<p style="color:var(--text)">Searching...</p>';
+      if(!cardName){ resultsDiv.innerHTML = '<p style="color:var(--text)">Please enter a card name.</p>'; return; }
+      try{
+        const result = await validateCommander(cardName);
+        if(result){
+          resultsDiv.innerHTML = `<h4 style="color:var(--text);margin:6px 0 8px 0">${result.validatedName}</h4><img src="${result.imageUrl}" alt="${result.validatedName}" style="max-width:100%;border-radius:6px">`;
+          await postSystemCardToChat(result.validatedName, result.imageUrl);
+          setTimeout(()=>{ const modal = document.getElementById('card-search-modal'); modal.style.display = 'none'; modal.setAttribute('aria-hidden','true'); }, 600);
+        } else { resultsDiv.innerHTML = `<p style="color:var(--text)">Card not found. Check spelling.</p>`; }
+      }catch(e){ resultsDiv.innerHTML = `<p style="color:var(--text)">Error connecting to Scryfall.</p>`; console.error(e); }
+    });
+
+    function initialRoute(){
+      const params = new URLSearchParams(window.location.search);
+      const idFromURL = params.get('roomID');
+      if(idFromURL){ promptPassword(idFromURL,'join'); setActiveNav('home'); return; }
+      const page = (location.hash || '#home').replace('#','') || 'home';
+      setActiveNav(page);
+      if(page === 'home') renderHome();
+      else if(page === 'changes') renderChanges();
+      else if(page === 'contact') renderContact();
+    }
+
+    onAuthStateChanged(auth, user=>{
+      if(user){ userId = user.uid; initialRoute(); }
+      else{ signInAnonymously(auth).catch(e=>{ document.getElementById("status-message").textContent = "Auth Error: " + e.message; }); }
+    });
+
+    // Expose restartGame for debugging
+    window.restartGame = restartGame;
+
+    // Helper used earlier (room expiry)
+    async function checkAndDeleteIfExpired(roomIdToCheck, roomData) {
+      try {
+        if (!roomData) return false;
+        const lastActiveField = roomData.lastActive;
+        let lastActiveDate = null;
+        if (!lastActiveField) return false;
+        if (typeof lastActiveField.toDate === 'function') lastActiveDate = lastActiveField.toDate();
+        else if (lastActiveField instanceof Date) lastActiveDate = lastActiveField;
+        else if (typeof lastActiveField === 'number') lastActiveDate = new Date(lastActiveField);
+        else return false;
+        const elapsedMinutes = (Date.now() - lastActiveDate.getTime()) / (1000 * 60);
+        if (elapsedMinutes > TIMEOUT_MINUTES) {
+          try { await deleteDoc(doc(db, ROOM_COLLECTION, roomIdToCheck)); } catch (e) { console.error("Failed to delete expired room:", e); }
+          return true;
         }
-
-        onAuthStateChanged(auth, user=>{
-            if(user){ userId = user.uid; initialRoute(); }
-            else{ signInAnonymously(auth).catch(e=>{ document.getElementById("status-message").textContent = "Auth Error: " + e.message; }); }
-        });
-
-        // Expose restartGame for debugging if needed
-        window.restartGame = restartGame;
-    </script>
+        return false;
+      } catch (e) { console.error("checkAndDeleteIfExpired error:", e); return false; }
+    }
+  </script>
 </body>
 </html>
