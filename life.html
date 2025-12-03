@@ -38,11 +38,13 @@
             color: #f0f0f0; /* Light input text */
         }
         
-        /* FIX: Removes the blue line/outline on input focus */
-        input:focus {
-            outline: none; 
-            border-color: #555; 
-            box-shadow: none !important; /* Use !important to override browser default styles */
+        /* GUARANTEED FIX: Removes the blue line/outline/shadow on input focus */
+        /* Targets ALL focused elements aggressively */
+        *:focus {
+            outline: none !important; 
+            box-shadow: none !important; 
+            -webkit-box-shadow: none !important;
+            border-color: #555 !important; /* Keep a neutral border */
         }
 
         button {
@@ -330,6 +332,11 @@
             max-width: 400px;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.7);
             position: relative; /* For modal autocomplete */
+        }
+        .modal-content input:focus { /* Reinforce focus removal inside modal */
+            outline: none !important;
+            box-shadow: none !important;
+            border-color: #555 !important;
         }
         #search-results img {
             max-width: 100%;
@@ -1193,7 +1200,10 @@
             roomId = null;
             
             // Hide preview card and modal when changing views
-            document.getElementById('lobby-card-preview').style.display = 'none';
+            const previewCard = document.getElementById('lobby-card-preview');
+            const previewImg = document.getElementById('preview-img');
+
+            previewCard.style.display = 'none';
             document.getElementById('card-search-modal').style.display = 'none';
 
             statusMessage.textContent = "Browse rooms or create a new one.";
@@ -1213,8 +1223,6 @@
                 <button id="delete-all-rooms-btn">Delete All Rooms (Admin)</button> 
             `;
 
-            const previewCard = document.getElementById('lobby-card-preview');
-            const previewImg = document.getElementById('preview-img');
 
             try {
                 const q = query(collection(db, ROOM_COLLECTION), limit(15));
@@ -1266,7 +1274,7 @@
                     });
                 });
                 
-                // FIXED: Lobby Commander Hover Preview
+                // FINAL FIX: Lobby Commander Hover Preview
                 listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan => {
                     const imageUrl = cmdSpan.dataset.imgUrl;
 
