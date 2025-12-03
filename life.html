@@ -14,6 +14,7 @@
             padding: 20px;
             background-color: #1e1e1e; /* Dark Background */
             color: #f0f0f0; /* Light Text */
+            position: relative; /* Base for fixed elements */
         }
         #app-container {
             width: 100%;
@@ -122,7 +123,7 @@
             cursor: help;
         }
         
-        /* --- Tooltip/Card Hover Styles (Default: Above) --- */
+        /* --- Tooltip/Card Hover Styles (Game View) --- */
         .card-tooltip {
             visibility: hidden;
             width: 250px;
@@ -133,7 +134,7 @@
             padding: 5px;
             position: absolute;
             z-index: 10; /* Ensure tooltip is above other elements */
-            bottom: 125%; /* Position the tooltip ABOVE the text */
+            bottom: 125%; /* Default: ABOVE */
             left: 50%;
             margin-left: -125px; /* Center the tooltip */
             opacity: 0;
@@ -210,10 +211,14 @@
             border-color: #ff5555;
         }
 
-        /* --- Suggestions List Styles --- */
-        #suggestions-list {
+        /* --- Suggestions List Styles (For Lobby Setup and Modal) --- */
+        #suggestions-list-container {
+            position: relative; 
+            margin-bottom: 10px;
+        }
+        .suggestions-list {
             position: absolute;
-            width: calc(100% - 50px); /* Match input width */
+            width: 100%; 
             background-color: #383838;
             border: 1px solid #2980b9;
             border-top: none;
@@ -222,8 +227,6 @@
             z-index: 100; 
             border-radius: 0 0 6px 6px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.5);
-            margin-top: -10px; /* Pull it up under the input */
-            left: 25px; /* Match padding */
         }
         .suggestion-item {
             padding: 8px 12px;
@@ -325,6 +328,25 @@
             margin-top: 15px;
         }
 
+        /* --- NEW: Lobby Card Preview (Fixed Left) --- */
+        #lobby-card-preview {
+            position: fixed;
+            top: 50%;
+            left: 20px; /* Offset from the left edge */
+            transform: translateY(-50%);
+            width: 250px; 
+            height: auto;
+            border: 3px solid #2980b9;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
+            z-index: 99; /* Below the modal */
+            display: none; 
+        }
+        #lobby-card-preview img {
+            display: block;
+            width: 100%;
+            border-radius: 5px;
+        }
         
         /* Global delete button style */
         #delete-all-rooms-btn {
@@ -359,6 +381,10 @@
 
     <div id="app-container">
         </div>
+    
+    <div id="lobby-card-preview">
+        <img id="preview-img" alt="Commander Preview">
+    </div>
 
     <p id="status-message">Initializing...</p>
 
@@ -366,7 +392,7 @@
         <div class="modal-content">
             <h3>Card Search (Scryfall)</h3>
             <input type="text" id="modal-card-name" placeholder="Enter card name">
-            <button id="modal-search-btn" class="btn-primary">Search</button>
+            <div id="modal-suggestions-list" class="suggestions-list"></div> <button id="modal-search-btn" class="btn-primary">Search</button>
             <div id="search-results"></div>
             <button id="modal-close-btn" class="btn-danger">Close</button>
         </div>
@@ -440,10 +466,12 @@
         async function validateCommander(name) {
             if (!name) return null;
             try {
+                // Use Scryfall's 'exact' search for validation
                 const response = await fetch(`${SCRYFALL_API}${encodeURIComponent(name)}`);
                 const data = await response.json();
                 
                 if (response.ok) {
+                    // Handle dual-faced cards
                     const imageUrl = data.image_uris?.normal || data.card_faces?.[0]?.image_uris?.normal;
                     
                     if (imageUrl) {
@@ -462,11 +490,16 @@
         
         /**
          * Fetches and displays autocomplete suggestions for commander input.
-         * @param {string} query - The current text in the commander input field.
+         * @param {string} query - The current text in the input field.
+         * @param {string} listId - The ID of the HTML element to populate (e.g., 'suggestions-list' or 'modal-suggestions-list').
+         * @param {string} inputId - The ID of the HTML input element to autofill.
          */
-        async function fetchAutocompleteSuggestions(query) {
-            const suggestionsList = document.getElementById('suggestions-list');
-            if (!suggestionsList) return;
+        async function fetchAutocompleteSuggestions(query, listId, inputId) {
+            const suggestionsList = document.getElementById(listId);
+            const inputField = document.getElementById(inputId);
+            
+            if (!suggestionsList || !inputField) return;
+
             suggestionsList.innerHTML = '';
             
             if (query.length < 2) return; 
@@ -481,8 +514,9 @@
                         item.classList.add('suggestion-item');
                         item.textContent = suggestion;
                         item.onclick = () => {
-                            document.getElementById('commander-input').value = suggestion;
+                            inputField.value = suggestion;
                             suggestionsList.innerHTML = ''; // Clear suggestions after selection
+                            inputField.focus(); // Keep focus after autofill
                         };
                         suggestionsList.appendChild(item);
                     });
@@ -528,7 +562,9 @@
         function renderRoomView(roomData) {
             const appContainer = document.getElementById("app-container");
             const statusMessage = document.getElementById("status-message");
-
+            
+            // Hide the fixed lobby preview card when entering game view
+            document.getElementById('lobby-card-preview').style.display = 'none';
             document.getElementById('card-search-modal').style.display = 'none';
 
             const currentPlayerName = roomData.players[userId]?.name || 'You';
@@ -581,8 +617,6 @@
                 
                 // Commander Name with Hover
                 const commanderName = player.commanderName || player.commander || 'N/A';
-                
-                // Use a generic placeholder if image URL is missing
                 const commanderImage = player.commanderImageUrl || '';
 
                 const commanderHtml = commanderImage ? `
@@ -687,7 +721,7 @@
 
             // --- ATTACH LISTENERS ---
             
-            // Tooltip Cutoff Fix
+            // Tooltip Cutoff Fix (In-Game View: Toggle Top/Bottom)
             playerIds.forEach(playerId => {
                 const cmdElement = document.getElementById(`cmd-name-${playerId}`);
                 if (cmdElement) {
@@ -695,7 +729,7 @@
                     const tooltip = cmdElement.querySelector('.card-tooltip');
                     
                     if (tooltip) {
-                        // Check if the element is in the top 30% of the viewport (or less than 200px from top)
+                        // Check if the element is in the top 30% of the container (arbitrary safe space)
                         if (rect.top < 200) { 
                             tooltip.classList.add('bottom');
                         } else {
@@ -975,13 +1009,14 @@
             const title = mode === 'join' ? `Join Room: ${rid}` : `Create Room: ${rid}`;
             const btnText = mode === 'join' ? "Enter Game" : "Create Room";
             
+            // Hide preview card and modal when changing views
+            document.getElementById('lobby-card-preview').style.display = 'none';
             document.getElementById('card-search-modal').style.display = 'none';
 
             appContainer.innerHTML = `
                 <h2 style="color:#f0f0f0;">${title}</h2>
                 <input type="text" id="player-name-input" placeholder="Your Player Name">
-                <input type="text" id="commander-input" placeholder="Your Commander's Name (Required)">
-                <div id="suggestions-list"></div> <input type="password" id="pwd-input" placeholder="Room Password">
+                <input type="text" id="commander-input" placeholder="Your Commander's Name (Required)" autocomplete="off"> <div id="suggestions-list" class="suggestions-list"></div> <input type="password" id="pwd-input" placeholder="Room Password">
                 <button id="action-btn" class="btn-primary">${btnText}</button>
                 <button id="cancel-btn" class="btn-danger">Cancel</button> 
                 <p id="err-msg" style="color:#ff5555;"></p>
@@ -997,7 +1032,7 @@
                 
                 if (query.length >= 2) {
                     autocompleteTimeout = setTimeout(() => {
-                        fetchAutocompleteSuggestions(query);
+                        fetchAutocompleteSuggestions(query, 'suggestions-list', 'commander-input');
                     }, 300); // Debounce to prevent flooding Scryfall API
                 } else {
                     suggestionsList.innerHTML = '';
@@ -1143,7 +1178,9 @@
             const appContainer = document.getElementById("app-container");
             const statusMessage = document.getElementById("status-message");
             roomId = null;
-
+            
+            // Hide preview card and modal when changing views
+            document.getElementById('lobby-card-preview').style.display = 'none';
             document.getElementById('card-search-modal').style.display = 'none';
 
             statusMessage.textContent = "Browse rooms or create a new one.";
@@ -1163,6 +1200,9 @@
                 <button id="delete-all-rooms-btn">Delete All Rooms (Admin)</button> 
             `;
 
+            const previewCard = document.getElementById('lobby-card-preview');
+            const previewImg = document.getElementById('preview-img');
+
             try {
                 const q = query(collection(db, ROOM_COLLECTION), limit(15));
                 const snap = await getDocs(q);
@@ -1176,15 +1216,19 @@
                         const rId = docSnap.id;
                         const pCount = Object.keys(rData.players || {}).length;
                         
-                        // Attempt to grab owner's validated commander name
-                        const ownerCmdName = rData.players[rData.ownerId]?.commanderName || rData.players[rData.ownerId]?.commander || 'N/A';
-                        const ownerName = rData.players[rData.ownerId]?.name || 'Owner';
+                        // Attempt to grab owner's validated commander name and image URL
+                        const ownerPlayer = rData.players[rData.ownerId];
+                        const ownerCmdName = ownerPlayer?.commanderName || ownerPlayer?.commander || 'N/A';
+                        const ownerCmdImage = ownerPlayer?.commanderImageUrl || '';
+                        const ownerName = ownerPlayer?.name || 'Owner';
                         
                         listHtml += `
                             <div class="room-item" style="display:flex; justify-content:space-between; align-items:center; background-color:#383838; padding: 10px; margin-bottom: 8px; border-radius: 4px;">
                                 <div class="room-info">
                                     <span class="room-id" style="font-weight:bold; color:#f0f0f0;">${rId}</span>
-                                    <span class="room-meta" style="font-size:0.9em; color:#aaa; display:block;">${pCount} Player(s) | Owner: ${ownerName} [${ownerCmdName}]</span>
+                                    <span class="room-meta" style="font-size:0.9em; color:#aaa; display:block;">${pCount} Player(s) | Owner: ${ownerName} 
+                                        <span class="lobby-cmd-name" data-img-url="${ownerCmdImage}" style="cursor:help;">[${ownerCmdName}]</span>
+                                    </span>
                                 </div>
                                 <button class="join-btn btn-secondary" data-rid="${rId}" style="width:auto;">Join</button>
                             </div>
@@ -1198,11 +1242,31 @@
 
             const listContainer = document.getElementById("room-list-container");
             if(listContainer) listContainer.innerHTML = listHtml;
+            
+            // --- Attach Listeners ---
 
             if(listContainer) {
+                // Room Joining
                 listContainer.querySelectorAll('.join-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         promptPassword(e.target.dataset.rid, 'join');
+                    });
+                });
+                
+                // NEW: Lobby Commander Hover Preview
+                listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan => {
+                    const imageUrl = cmdSpan.dataset.imgUrl;
+
+                    cmdSpan.addEventListener('mouseenter', () => {
+                        if (imageUrl) {
+                            previewImg.src = imageUrl;
+                            previewCard.style.display = 'block';
+                        }
+                    });
+
+                    cmdSpan.addEventListener('mouseleave', () => {
+                        previewCard.style.display = 'none';
+                        previewImg.src = ''; 
                     });
                 });
             }
@@ -1224,12 +1288,32 @@
         }
 
         // --- Card Search Modal Logic ---
+        const modalCardNameInput = document.getElementById('modal-card-name');
+        const modalSuggestionsList = document.getElementById('modal-suggestions-list');
+
         document.getElementById('modal-close-btn').addEventListener('click', () => {
             document.getElementById('card-search-modal').style.display = 'none';
         });
         
-        document.getElementById('modal-search-btn').addEventListener('click', async () => {
-            const cardName = document.getElementById('modal-card-name').value.trim();
+        // NEW: Modal Autocomplete Listener
+        modalCardNameInput.addEventListener('input', () => {
+            const query = modalCardNameInput.value.trim();
+            if (autocompleteTimeout) clearTimeout(autocompleteTimeout);
+            
+            if (query.length >= 2) {
+                autocompleteTimeout = setTimeout(() => {
+                    fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name');
+                }, 300); 
+            } else {
+                modalSuggestionsList.innerHTML = '';
+            }
+        });
+        
+        // Clear suggestions when clicking search button
+        document.getElementById('modal-search-btn').addEventListener('click', () => {
+            modalSuggestionsList.innerHTML = '';
+            // Proceed with search logic
+            const cardName = modalCardNameInput.value.trim();
             const resultsDiv = document.getElementById('search-results');
             resultsDiv.innerHTML = '<p style="color:#f0f0f0;">Searching...</p>';
 
@@ -1238,27 +1322,20 @@
                 return;
             }
 
-            try {
-                const response = await fetch(`${SCRYFALL_API}${encodeURIComponent(cardName)}`);
-                const data = await response.json();
-
-                if (response.ok) {
-                    const imgUrl = data.image_uris?.normal || data.card_faces?.[0]?.image_uris?.normal;
-                    if (imgUrl) {
-                        resultsDiv.innerHTML = `
-                            <h4 style="color:#f0f0f0;">${data.name}</h4>
-                            <img src="${imgUrl}" alt="${data.name}">
-                        `;
-                    } else {
-                        resultsDiv.innerHTML = '<p style="color:#f0f0f0;">Card found, but image unavailable.</p>';
-                    }
+            // Using the existing validateCommander function for fetching the full card data
+            validateCommander(cardName).then(result => {
+                if (result) {
+                    resultsDiv.innerHTML = `
+                        <h4 style="color:#f0f0f0;">${result.validatedName}</h4>
+                        <img src="${result.imageUrl}" alt="${result.validatedName}">
+                    `;
                 } else {
                     resultsDiv.innerHTML = `<p style="color:#f0f0f0;">Card not found. Check spelling.</p>`;
                 }
-            } catch (e) {
+            }).catch(e => {
                 resultsDiv.innerHTML = `<p style="color:#f0f0f0;">Error connecting to Scryfall.</p>`;
                 console.error(e);
-            }
+            });
         });
 
         // ----------------------------------------------------------------------
