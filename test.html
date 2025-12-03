@@ -10,14 +10,13 @@
       --accent:#2980b9;--accent-strong:#1f6fa8;--green:#27ae60;--red:#c0392b;
       --dark-border:#22272a;--input-bg:#1f2326;
     }
-    /* Prevent layout overflow and ensure predictable sizing */
     *,*::before,*::after{ box-sizing:border-box }
     html,body{height:100%;margin:0}
     body{
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       background:var(--bg);color:var(--text);display:flex;flex-direction:column;
       align-items:center;padding:20px;box-sizing:border-box;min-height:100vh;
-      overflow-x:hidden; /* stop right-side clipping on mobile */
+      overflow-x:hidden;
     }
     header.app-header{width:100%;max-width:1100px;display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px}
     .brand{display:flex;flex-direction:column;gap:2px}
@@ -48,6 +47,7 @@
     .player-name{font-weight:800;font-size:1rem;color:var(--text)}
     .player-sub{font-size:.85rem;color:var(--muted)}
     .life-big{font-size:3.2rem;font-weight:900;color:var(--text);letter-spacing:-1px}
+    .life-edit{width:110px;padding:10px;border-radius:8px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center;font-weight:800;margin-top:6px}
     .controls{display:flex;gap:8px;flex-wrap:wrap}
     .control-btn{padding:8px 12px;border-radius:8px;font-weight:800;min-width:56px;text-align:center;background:linear-gradient(180deg,#2b2b2b,#232323);color:var(--text);border:1px solid rgba(255,255,255,0.03);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
     .control-btn.positive{background:linear-gradient(180deg,#2ecc71,#27ae60);color:#04260a}
@@ -89,22 +89,17 @@
     .muted{color:var(--muted)}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .col{display:flex;flex-direction:column;gap:8px}
-    /* Chat full width container */
     #chat-container{width:100%;margin-top:18px}
     #chat-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    /* Mobile-specific layout fixes */
     @media(max-width:720px){
       header.app-header{flex-direction:column;align-items:flex-start;gap:8px}
       #lobby-card-preview{display:none!important}
       #chat-card-preview{display:none!important}
-      /* Stack the inner player panel columns vertically to avoid horizontal overflow */
       .player-panel > div[style*="display:flex"][style*="justify-content:space-between"]{
         flex-direction:column!important;align-items:stretch!important;gap:12px!important
       }
-      /* Make the right-side controls full width on mobile */
       .player-panel .controls{width:100%}
       .player-panel div[style*="min-width:220px"]{min-width:0!important;width:100%!important}
-      /* Reduce container padding slightly */
       #app-container{padding:14px}
       body{padding:14px}
     }
@@ -169,9 +164,7 @@
       appId: "1:36730058988:web:757e2d9620593b4f65022a"
     };
 
-    // TIMEOUT: set to 20 minutes per request
     const TIMEOUT_MINUTES = 20;
-
     const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
     const SCRYFALL_AUTOCOMPLETE_API = "https://api.scryfall.com/cards/autocomplete?q=";
     const DELETE_ALL_PWD = "DeleteAllRooms";
@@ -200,7 +193,6 @@
     let autocompleteTimeout = null;
     const ROOM_COLLECTION = "mtg_rooms";
 
-    // Track which players' CMD controls are open (persist across renders)
     const openCmdControls = new Set();
 
     // ----------------------------------------------------------------------
@@ -243,7 +235,6 @@
       }catch(e){ console.error("Autocomplete error:", e); }
     }
 
-    // compute outgoing map for a source player (what this player's commander has done to others)
     function computeOutgoingCmdDamage(roomData, sourcePlayerId){
       const players = roomData.players || {};
       const order = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? roomData.playersOrder : Object.keys(players || {});
@@ -257,13 +248,11 @@
       return result;
     }
 
-    // compute outgoing total for a source player (sum of their commanderDamage map)
     function computeOutgoingTotal(roomData, sourcePlayerId){
       const dmgMap = (roomData.players?.[sourcePlayerId]?.commanderDamage) || {};
       return Object.keys(dmgMap).reduce((s,k)=> s + (parseInt(dmgMap[k])||0), 0);
     }
 
-    // compute incoming total for a target player
     function computeIncomingCmdDamage(roomData, targetPlayerId){
       let total = 0;
       const players = roomData.players || {};
@@ -275,7 +264,6 @@
       return total;
     }
 
-    // compute max incoming from a single opponent to target (for 21+ elimination)
     function computeMaxSingleIncomingCmdDamage(roomData, targetPlayerId){
       let maxVal = 0;
       const players = roomData.players || {};
@@ -341,7 +329,7 @@
     }
 
     // ----------------------------------------------------------------------
-    // SETUP VIEW (room list + create)
+    // SETUP VIEW
     // ----------------------------------------------------------------------
     function formatTimeLeft(minutesLeft){
       if(minutesLeft <= 0) return 'closing soon';
@@ -383,17 +371,14 @@
             const pCount = Object.keys(rData.players || {}).length;
             const ownerPlayer = rData.players[rData.ownerId];
             const ownerCmdName = ownerPlayer?.commanderName || ownerPlayer?.commander || 'N/A';
-            const ownerCmdImage = ownerPlayer?.commanderImageUrl || '';
             const ownerName = ownerPlayer?.name || 'Owner';
 
-            // compute createdAt and time left until timeout
             let createdAtDate = null;
             if(rData.createdAt){
               if(typeof rData.createdAt.toDate === 'function') createdAtDate = rData.createdAt.toDate();
               else if(rData.createdAt instanceof Date) createdAtDate = rData.createdAt;
               else if(typeof rData.createdAt === 'number') createdAtDate = new Date(rData.createdAt);
             }
-            // prefer lastLifeChange for timeout baseline
             let baselineDate = null;
             if(rData.lastLifeChange){
               if(typeof rData.lastLifeChange.toDate === 'function') baselineDate = rData.lastLifeChange.toDate();
@@ -439,19 +424,6 @@
         listContainer.querySelectorAll('.join-btn').forEach(btn=>{
           btn.addEventListener('click', (e)=> promptPassword(e.target.dataset.rid, 'join'));
         });
-
-        const previewCardEl = document.getElementById('lobby-card-preview');
-        const previewImgEl = document.getElementById('preview-img');
-
-        listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan=>{
-          const imageUrl = cmdSpan.dataset.imgUrl;
-          cmdSpan.addEventListener('mouseenter', ()=>{
-            if(imageUrl && previewCardEl && previewImgEl){ previewImgEl.src = imageUrl; previewCardEl.style.display = 'block'; }
-          });
-          cmdSpan.addEventListener('mouseleave', ()=>{
-            if(previewCardEl){ previewCardEl.style.display = 'none'; previewImgEl.src = ''; }
-          });
-        });
       }
 
       document.getElementById("search-btn").onclick = async ()=>{
@@ -487,9 +459,9 @@
           cardSpan.dataset.cardImageUrl = msg.cardImageUrl;
           cardSpan.dataset.cardName = msg.message;
           messageDiv.appendChild(cardSpan);
-          cardSpan.addEventListener('mouseenter', (e)=>{ showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
-          cardSpan.addEventListener('mouseleave', (e)=>{ hideChatCardPreviewWithDelay(); });
-          cardSpan.addEventListener('click', (e)=>{ const preview = document.getElementById('chat-card-preview'); if(preview.style.display === 'block') hideChatCardPreviewImmediate(); else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          cardSpan.addEventListener('mouseenter', ()=>{ showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          cardSpan.addEventListener('mouseleave', ()=>{ hideChatCardPreviewWithDelay(); });
+          cardSpan.addEventListener('click', ()=>{ const preview = document.getElementById('chat-card-preview'); if(preview.style.display === 'block') hideChatCardPreviewImmediate(); else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
         } else {
           messageDiv.appendChild(document.createTextNode(' ' + msg.message));
         }
@@ -517,7 +489,6 @@
       const currentPlayerName = roomData.players[userId]?.name || 'You';
       statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
 
-      // header + controls
       let html = `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
           <div>
@@ -537,12 +508,10 @@
         </div>
       `;
 
-      // Use stable playersOrder if present, otherwise fallback to players keys
       const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
           ? [...roomData.playersOrder]
           : Object.keys(roomData.players || {});
 
-      // Ensure current user is first for convenience but keep stable order for others
       if (playerIds.includes(userId)) {
           const idx = playerIds.indexOf(userId);
           if (idx > 0) {
@@ -562,11 +531,9 @@
         const commanderName = player.commanderName || player.commander || 'N/A';
         const infectVal = player.infect || 0;
 
-        // threshold: eliminated if life <= 0 or incoming from any single opponent >= 21
         const maxSingleIncoming = computeMaxSingleIncomingCmdDamage(roomData, playerId);
         const isEliminated = (life <= 0) || (maxSingleIncoming >= 21);
 
-        // per-opponent rows only inside cmd-controls
         let perOppRows = '';
         const opponents = playerIds.filter(id => id !== playerId);
         if(opponents.length > 0){
@@ -588,7 +555,6 @@
           });
         }
 
-        // Infect controls (compact, next to value) - only allow editing your own infect
         const infectControlsHtml = `
           <div style="display:flex;align-items:center;gap:6px">
             <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-</button>
@@ -639,6 +605,16 @@
           `;
         }
 
+        // Life display + editable input for YOU
+        const lifeDisplayHtml = isMe
+          ? `
+              <div class="life-big" id="life-display-${playerId}">${life}</div>
+              <input type="number" inputmode="numeric" pattern="[0-9]*" class="life-edit" id="life-edit-${playerId}" value="${life}" min="0">
+            `
+          : `
+              <div class="life-big" id="life-display-${playerId}">${life}</div>
+            `;
+
         html += `
           <div class="player-panel${isEliminated ? ' player-eliminated' : ''}" data-player-id="${playerId}">
             <div class="player-header">
@@ -654,7 +630,7 @@
 
             <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
               <div>
-                <div class="life-big" id="life-display-${playerId}">${life}</div>
+                ${lifeDisplayHtml}
 
                 <div style="margin-top:8px">
                   <div class="cmd-block">
@@ -664,7 +640,6 @@
                   <div class="infect-block" style="margin-top:8px">
                     ${infectControlsHtml}
                   </div>
-
                 </div>
               </div>
 
@@ -698,7 +673,6 @@
       });
       html += `</div>`;
 
-      // Chat full width below player grid
       html += `
         <div id="chat-container">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap">
@@ -722,10 +696,8 @@
 
       appContainer.innerHTML = html;
 
-      // render chat
       renderChat(roomData.chatLog || [], currentPlayerName);
 
-      // reapply openCmdControls state after render
       const playerIdsAfter = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
           ? [...roomData.playersOrder]
           : Object.keys(roomData.players || {});
@@ -735,22 +707,22 @@
         if(controls){ if(openCmdControls.has(pid)) controls.classList.add('open'); else controls.classList.remove('open'); }
       });
 
-      // attach listeners for controls
       document.querySelectorAll('.control-btn').forEach(btn=>{
-        btn.addEventListener('click', async (e)=>{
+        btn.addEventListener('click', async ()=>{
           if (btn.disabled) return;
           const action = btn.dataset.action;
           const targetPlayer = btn.dataset.player;
           const delta = parseInt(btn.dataset.delta || '0');
 
           if(action === 'life'){
-            // optimistic UI: update immediately for responsiveness
             if (targetPlayer === userId) {
               const lifeEl = document.getElementById(`life-display-${targetPlayer}`);
+              const inputEl = document.getElementById(`life-edit-${targetPlayer}`);
               if (lifeEl) {
                 const current = parseInt(lifeEl.textContent || '0');
                 const next = current + delta;
                 lifeEl.textContent = next;
+                if (inputEl) inputEl.value = next;
                 const panel = lifeEl.closest('.player-panel');
                 if (panel) {
                   const eliminatedNow = (next <= 0);
@@ -794,9 +766,32 @@
         });
       });
 
-      // inputs for direct edits (opp -> target)
+      // direct life input: YOU only
+      const lifeEdit = document.getElementById(`life-edit-${userId}`);
+      if (lifeEdit) {
+        const applyLifeInput = async () => {
+          let val = parseInt(lifeEdit.value);
+          if (isNaN(val)) return;
+          val = Math.max(0, val);
+          const lifeEl = document.getElementById(`life-display-${userId}`);
+          if (lifeEl) {
+            lifeEl.textContent = val;
+            const panel = lifeEl.closest('.player-panel');
+            if (panel) {
+              if (val <= 0) panel.classList.add('player-eliminated');
+              else panel.classList.remove('player-eliminated');
+            }
+          }
+          await setLifeForPlayerDirect(userId, val);
+        };
+        lifeEdit.addEventListener('keydown', (e)=>{
+          if(e.key === 'Enter'){ e.preventDefault(); applyLifeInput(); }
+        });
+        lifeEdit.addEventListener('blur', applyLifeInput);
+      }
+
       document.querySelectorAll('.cmd-target-input').forEach(input => {
-        input.addEventListener('change', async (e) => {
+        input.addEventListener('change', async () => {
           if (input.disabled) return;
           const target = input.dataset.target;
           const opp = input.dataset.opp;
@@ -805,7 +800,6 @@
         });
       });
 
-      // chat submit
       const chatForm = document.getElementById('chat-input-form');
       if(chatForm){
         chatForm.addEventListener('submit', (e)=>{
@@ -816,7 +810,6 @@
         });
       }
 
-      // roll dice top button wiring
       const rollBtnTop = document.getElementById('roll-d20-btn-top');
       const rollResultTop = document.getElementById('roll-result-top');
       if(rollBtnTop){
@@ -826,7 +819,6 @@
         });
       }
 
-      // card search modal wiring
       document.getElementById('card-search-btn').addEventListener('click', ()=>{
         const modal = document.getElementById('card-search-modal'); modal.style.display = 'flex'; modal.setAttribute('aria-hidden','false'); document.getElementById('modal-card-name').value = ''; document.getElementById('search-results').innerHTML = '';
       });
@@ -847,7 +839,6 @@
         navigateTo('home');
       });
 
-      // modal autocomplete wiring
       const modalCardNameInput = document.getElementById('modal-card-name');
       const modalSuggestionsList = document.getElementById('modal-suggestions-list');
       let modalAutocompleteTimeout = null;
@@ -858,7 +849,7 @@
         else modalSuggestionsList.innerHTML = '';
       });
 
-      document.addEventListener('click', (e)=>{});
+      document.addEventListener('click', ()=>{});
     }
 
     // ----------------------------------------------------------------------
@@ -880,10 +871,9 @@
       catch(e){ console.error("Error posting system card to chat:", e); }
     }
 
-    // Update life: only allow editing your own life. Also update lastLifeChange timestamp so timeout resets.
     async function updateLifeForPlayer(targetPlayerId, delta){
       if(!roomId || !userId) return;
-      if(targetPlayerId !== userId) return; // only allow editing your own life
+      if(targetPlayerId !== userId) return;
       const ref = doc(db, ROOM_COLLECTION, roomId);
       try{
         const snap = await getDoc(ref);
@@ -894,15 +884,29 @@
         const cur = target.life ?? getStartingLife();
         const newLife = cur + delta;
         target.life = newLife;
-        // update lastLifeChange so timeout is based on life changes
         await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp(), lastLifeChange: serverTimestamp() }, { merge: true });
       }catch(e){ console.error("Error updating life for player:", e); }
     }
 
-    // Infect update: only your own infect (does not affect lastLifeChange)
+    // direct set life (from input)
+    async function setLifeForPlayerDirect(targetPlayerId, newLife){
+      if(!roomId || !userId) return;
+      if(targetPlayerId !== userId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      try{
+        const snap = await getDoc(ref);
+        if(!snap.exists()) return;
+        const data = snap.data();
+        const players = data.players || {};
+        const target = players[targetPlayerId] || {};
+        target.life = Math.max(0, parseInt(newLife)||0);
+        await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp(), lastLifeChange: serverTimestamp() }, { merge: true });
+      }catch(e){ console.error("Error setting life directly:", e); }
+    }
+
     async function updateInfect(targetPlayerId, delta){
       if(!roomId || !userId) return;
-      if(targetPlayerId !== userId) return; // only allow editing your own infect
+      if(targetPlayerId !== userId) return;
       const ref = doc(db, ROOM_COLLECTION, roomId);
       try{
         const snap = await getDoc(ref);
@@ -917,7 +921,6 @@
       }catch(e){ console.error("Error updating infect:", e); }
     }
 
-    // Update opponent's outgoing to target (oppId -> targetPlayerId). Only editable when target is you.
     async function updateCmdDamageForTarget(oppId, targetPlayerId, delta){
       if(!roomId || !userId) return;
       if(targetPlayerId !== userId) return;
@@ -937,7 +940,6 @@
       }catch(e){ console.error("Error updating commander damage for target (opp -> target):", e); }
     }
 
-    // direct set: oppId -> targetPlayerId = newValue
     async function updateCmdDamageForTargetDirectly(oppId, targetPlayerId, newValue){
       if(!roomId || !userId) return;
       if(targetPlayerId !== userId) return;
@@ -956,7 +958,7 @@
     }
 
     // ----------------------------------------------------------------------
-    // RESTART GAME: reset life and clear commanderDamage and infect for all players
+    // RESTART GAME
     // ----------------------------------------------------------------------
     async function restartGame(){
       if(!roomId) return;
@@ -975,14 +977,13 @@
             infect: 0
           };
         });
-        // reset lastLifeChange to now so timeout restarts
         await setDoc(ref, { players: updates, lastActive: serverTimestamp(), lastLifeChange: serverTimestamp() }, { merge: true });
         alert("Game restarted: life reset, commander damage and infect cleared.");
       }catch(e){ console.error("Failed to restart game:", e); alert("Failed to restart game. Check console."); }
     }
 
     // ----------------------------------------------------------------------
-    // EDIT COMMANDER: modal flow
+    // EDIT COMMANDER
     // ----------------------------------------------------------------------
     function openEditCommanderModal(prefillName=''){
       const modal = document.getElementById('edit-commander-modal');
@@ -1182,7 +1183,7 @@
     }
 
     // ----------------------------------------------------------------------
-    // CARD SEARCH MODAL: post to chat as System and show right preview on hover
+    // CARD SEARCH MODAL
     // ----------------------------------------------------------------------
     const modalCardNameInput = document.getElementById('modal-card-name');
     const modalSuggestionsList = document.getElementById('modal-suggestions-list');
@@ -1211,7 +1212,7 @@
     });
 
     // ----------------------------------------------------------------------
-    // INIT: auth + initial route + persist join on refresh
+    // INIT
     // ----------------------------------------------------------------------
     function initialRoute(){
       const params = new URLSearchParams(window.location.search);
@@ -1234,7 +1235,6 @@
       else{ signInAnonymously(auth).catch(e=>{ document.getElementById("status-message").textContent = "Auth Error: " + e.message; }); }
     });
 
-    // Expose restartGame for debugging
     window.restartGame = restartGame;
   </script>
 </body>
