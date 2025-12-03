@@ -76,6 +76,9 @@
         .btn-danger{background:linear-gradient(180deg,var(--red),#9b2b24);color:#fff}
         .btn-secondary{background:linear-gradient(180deg,#3a3a3a,#2f2f2f);color:#fff}
 
+        /* disabled styling */
+        button:disabled, input:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.2); }
+
         /* --- Player grid / panels --- */
         .player-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:12px}
         @media(max-width:900px){.player-grid{grid-template-columns:1fr}}
@@ -93,7 +96,6 @@
         .control-btn{padding:8px 12px;border-radius:8px;font-weight:800;min-width:56px;text-align:center;background:linear-gradient(180deg,#2b2b2b,#232323);color:var(--text);border:1px solid rgba(255,255,255,0.03);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
         .control-btn.positive{background:linear-gradient(180deg,#2ecc71,#27ae60);color:#04260a}
         .control-btn.negative{background:linear-gradient(180deg,#ff6b6b,#c0392b);color:#2b0706}
-        .control-btn:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.2)}
         .cmd-block{display:flex;justify-content:space-between;align-items:center;gap:8px;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.02)}
         .cmd-label{font-size:.9rem;color:var(--muted)}
         .cmd-value{font-weight:800;color:#ffb3b3}
@@ -276,7 +278,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import {
             getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp,
-            arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc
+            arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc, arrayRemove
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ----------------------------------------------------------------------
@@ -300,6 +302,32 @@
         // ----------------------------------------------------------------------
         function hashPassword(password){ return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex); }
         function getStartingLife(){ return 40; }
+
+        /**
+         * Check room lastActive and delete if expired.
+         * Returns true if the room was deleted, false otherwise.
+         */
+        async function checkAndDeleteIfExpired(roomIdToCheck, roomData) {
+            try {
+                if (!roomData) return false;
+                const lastActiveField = roomData.lastActive;
+                let lastActiveDate = null;
+                if (!lastActiveField) return false;
+                if (typeof lastActiveField.toDate === 'function') lastActiveDate = lastActiveField.toDate();
+                else if (lastActiveField instanceof Date) lastActiveDate = lastActiveField;
+                else if (typeof lastActiveField === 'number') lastActiveDate = new Date(lastActiveField);
+                else return false;
+                const elapsedMinutes = (Date.now() - lastActiveDate.getTime()) / (1000 * 60);
+                if (elapsedMinutes > TIMEOUT_MINUTES) {
+                    try { await deleteDoc(doc(db, ROOM_COLLECTION, roomIdToCheck)); } catch (e) { console.error("Failed to delete expired room:", e); }
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.error("checkAndDeleteIfExpired error:", e);
+                return false;
+            }
+        }
 
         async function validateCommander(name){
             if(!name) return null;
@@ -338,32 +366,6 @@
             }catch(e){ console.error("Autocomplete error:", e); }
         }
 
-        /**
-         * Check room lastActive and delete if expired.
-         * Returns true if the room was deleted, false otherwise.
-         */
-        async function checkAndDeleteIfExpired(roomIdToCheck, roomData) {
-            try {
-                if (!roomData) return false;
-                const lastActiveField = roomData.lastActive;
-                let lastActiveDate = null;
-                if (!lastActiveField) return false;
-                if (typeof lastActiveField.toDate === 'function') lastActiveDate = lastActiveField.toDate();
-                else if (lastActiveField instanceof Date) lastActiveDate = lastActiveField;
-                else if (typeof lastActiveField === 'number') lastActiveDate = new Date(lastActiveField);
-                else return false;
-                const elapsedMinutes = (Date.now() - lastActiveDate.getTime()) / (1000 * 60);
-                if (elapsedMinutes > TIMEOUT_MINUTES) {
-                    try { await deleteDoc(doc(db, ROOM_COLLECTION, roomIdToCheck)); } catch (e) { console.error("Failed to delete expired room:", e); }
-                    return true;
-                }
-                return false;
-            } catch (e) {
-                console.error("checkAndDeleteIfExpired error:", e);
-                return false;
-            }
-        }
-
         // ----------------------------------------------------------------------
         // ROUTING & PAGES
         // ----------------------------------------------------------------------
@@ -400,8 +402,8 @@
         async function renderHome(){ await renderSetupView(); }
 
         const CHANGELOG = [
-            { version: "0.9.5", date: "2025-12-05", notes: "UI tweaks: static CMD rows, compact infect controls, preview button adjustments." },
-            { version: "0.9.4", date: "2025-12-04", notes: "Persistent CMD panels, infect tracking, per-target commander damage editing, preview styling." }
+            { version: "0.9.6", date: "2025-12-06", notes: "Stable player order and edit restrictions; UI polish." },
+            { version: "0.9.5", date: "2025-12-05", notes: "UI tweaks: static CMD rows, compact infect controls, preview button adjustments." }
         ];
 
         function renderChanges(){
@@ -636,44 +638,59 @@
                 </div>
             `;
 
-            const playerIds = Object.keys(roomData.players);
-            playerIds.sort((a,b)=> (a === userId ? -1 : b === userId ? 1 : 0));
+            // Use stable playersOrder if present, otherwise fallback to players keys
+            const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
+                ? [...roomData.playersOrder]
+                : Object.keys(roomData.players || {});
+
+            // Ensure current user is first for convenience but keep stable order for others
+            if (playerIds.includes(userId)) {
+                const idx = playerIds.indexOf(userId);
+                if (idx > 0) {
+                    playerIds.splice(idx, 1);
+                    playerIds.unshift(userId);
+                }
+            } else if (roomData.players && roomData.players[userId]) {
+                playerIds.unshift(userId);
+            }
 
             html += `<div class="player-grid">`;
             playerIds.forEach(playerId=>{
                 const player = roomData.players[playerId];
+                if(!player) return; // skip if player data missing
                 const isMe = playerId === userId;
                 const life = player.life ?? getStartingLife();
                 const commanderName = player.commanderName || player.commander || 'N/A';
                 const infectVal = player.infect || 0;
 
-                // Build per-opponent commander damage rows for this player (damage this player has taken from each opponent)
-                // We'll render these rows only inside the toggled cmd-controls (no duplicate visible rows)
+                // per-opponent rows will be rendered only inside the toggled cmd-controls
                 let perOppRows = '';
                 const opponents = playerIds.filter(id => id !== playerId);
                 if(opponents.length > 0){
                     opponents.forEach(oppId => {
                         const dmg = (player.commanderDamage && player.commanderDamage[oppId]) || 0;
                         const oppName = roomData.players[oppId]?.name || 'Player';
+                        // disable controls if not your own player
+                        const disabledAttr = isMe ? '' : 'disabled';
                         perOppRows += `
                             <div class="per-opp-row" data-target="${playerId}" data-opp="${oppId}">
                                 <div class="per-opp-left">From <strong>${oppName}</strong></div>
                                 <div class="per-opp-controls">
-                                    <button class="control-btn negative small-btn" data-action="cmd-target-sub" data-target="${playerId}" data-opp="${oppId}">-</button>
-                                    <input type="number" value="${dmg}" data-target="${playerId}" data-opp="${oppId}" class="cmd-target-input" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center">
-                                    <button class="control-btn negative small-btn" data-action="cmd-target-add" data-target="${playerId}" data-opp="${oppId}">+</button>
+                                    <button class="control-btn negative small-btn" data-action="cmd-target-sub" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>-</button>
+                                    <input type="number" value="${dmg}" data-target="${playerId}" data-opp="${oppId}" class="cmd-target-input" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center" ${disabledAttr}>
+                                    <button class="control-btn negative small-btn" data-action="cmd-target-add" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>+</button>
                                 </div>
                             </div>
                         `;
                     });
                 }
 
-                // Infect controls (compact, next to value)
+                // Infect controls (compact, next to value) - only allow editing your own infect
                 const infectControlsHtml = `
                     <div style="display:flex;align-items:center;gap:6px">
-                        <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}">-</button>
+                        <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-</button>
                         <div class="infect-value" id="infect-${playerId}">${infectVal}</div>
-                        <button class="control-btn small-btn" data-action="infect-add" data-player="${playerId}">+</button>
+                        <button class="control-btn small-btn" data-action="infect-add" data-player="${playerId}" ${isMe ? '' : 'disabled'}>+</button>
                     </div>
                 `;
 
@@ -710,18 +727,16 @@
                                         ${infectControlsHtml}
                                     </div>
 
-                                    <!-- per-opponent rows removed from main view to avoid duplication.
-                                         They are rendered only inside the toggled cmd-controls below. -->
                                 </div>
                             </div>
 
                             <div style="min-width:220px;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
                                 <div class="controls" style="flex-direction:column;width:100%">
                                     <div style="display:flex;gap:8px;width:100%">
-                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-5">-5</button>
-                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-1">-1</button>
-                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+1">+1</button>
-                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+5">+5</button>
+                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-5" ${isMe ? '' : 'disabled'}>-5</button>
+                                        <button class="control-btn negative" data-action="life" data-player="${playerId}" data-delta="-1" ${isMe ? '' : 'disabled'}>-1</button>
+                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+1" ${isMe ? '' : 'disabled'}>+1</button>
+                                        <button class="control-btn positive" data-action="life" data-player="${playerId}" data-delta="+5" ${isMe ? '' : 'disabled'}>+5</button>
                                     </div>
                                     <div style="display:flex;gap:8px;width:100%">
                                         <button class="control-btn" data-action="cmd-toggle" data-player="${playerId}">CMD DMG</button>
@@ -778,7 +793,15 @@
             renderChat(roomData.chatLog || [], currentPlayerName);
 
             // reapply openCmdControls state after render
-            const playerIdsAfter = Object.keys(roomData.players || {});
+            const playerIdsAfter = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
+                ? [...roomData.playersOrder]
+                : Object.keys(roomData.players || {});
+            // ensure current user first if present
+            if (playerIdsAfter.includes(userId)) {
+                const idx = playerIdsAfter.indexOf(userId);
+                if (idx > 0) { playerIdsAfter.splice(idx,1); playerIdsAfter.unshift(userId); }
+            }
+
             playerIdsAfter.forEach(pid => {
                 const controls = document.getElementById(`cmd-controls-${pid}`);
                 if(controls){
@@ -790,6 +813,7 @@
             // attach listeners for controls
             document.querySelectorAll('.control-btn').forEach(btn=>{
                 btn.addEventListener('click', async (e)=>{
+                    if (btn.disabled) return; // ignore disabled controls
                     const action = btn.dataset.action;
                     const targetPlayer = btn.dataset.player;
                     const delta = parseInt(btn.dataset.delta || '0');
@@ -835,6 +859,7 @@
             // attach inputs for per-target direct edits (static rows)
             document.querySelectorAll('.cmd-target-input').forEach(input => {
                 input.addEventListener('change', async (e) => {
+                    if (input.disabled) return;
                     const target = input.dataset.target;
                     const opp = input.dataset.opp;
                     const val = parseInt(input.value) || 0;
@@ -925,7 +950,8 @@
         }
 
         async function updateLifeForPlayer(targetPlayerId, delta){
-            if(!roomId) return;
+            if(!roomId || !userId) return;
+            if(targetPlayerId !== userId) return; // only allow editing your own life
             const ref = doc(db, ROOM_COLLECTION, roomId);
             try{
                 const snap = await getDoc(ref);
@@ -941,7 +967,8 @@
         }
 
         async function updateInfect(targetPlayerId, delta){
-            if(!roomId) return;
+            if(!roomId || !userId) return;
+            if(targetPlayerId !== userId) return; // only allow editing your own infect
             const ref = doc(db, ROOM_COLLECTION, roomId);
             try{
                 const snap = await getDoc(ref);
@@ -957,7 +984,8 @@
         }
 
         async function updateCmdDamageForTarget(targetPlayerId, oppId, delta){
-            if(!roomId) return;
+            if(!roomId || !userId) return;
+            if(targetPlayerId !== userId) return; // only allow editing your own player's commander damage values
             const ref = doc(db, ROOM_COLLECTION, roomId);
             try{
                 const snap = await getDoc(ref);
@@ -975,7 +1003,8 @@
         }
 
         async function updateCmdDamageForTargetDirectly(targetPlayerId, oppId, newValue){
-            if(!roomId) return;
+            if(!roomId || !userId) return;
+            if(targetPlayerId !== userId) return; // only allow editing your own player's commander damage values
             const ref = doc(db, ROOM_COLLECTION, roomId);
             try{
                 const snap = await getDoc(ref);
@@ -1156,8 +1185,10 @@
                                     commanderName: validatedName,
                                     commanderImageUrl: imageUrl
                                 };
+                                // append to playersOrder so join order is preserved
                                 await updateDoc(ref, {
                                     ['players.' + userId]: playerObj,
+                                    playersOrder: arrayUnion(userId),
                                     lastActive: serverTimestamp()
                                 });
                                 listenToRoom(rid);
@@ -1201,6 +1232,7 @@
                     createdAt: serverTimestamp(),
                     lastActive: serverTimestamp(),
                     chatLog: [],
+                    playersOrder: [userId], // stable join order
                     players: {
                         [userId]: {
                             life: getStartingLife(),
