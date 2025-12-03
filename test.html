@@ -301,32 +301,6 @@
         function hashPassword(password){ return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex); }
         function getStartingLife(){ return 40; }
 
-        /**
-         * Check room lastActive and delete if expired.
-         * Returns true if the room was deleted, false otherwise.
-         */
-        async function checkAndDeleteIfExpired(roomIdToCheck, roomData) {
-            try {
-                if (!roomData) return false;
-                const lastActiveField = roomData.lastActive;
-                let lastActiveDate = null;
-                if (!lastActiveField) return false;
-                if (typeof lastActiveField.toDate === 'function') lastActiveDate = lastActiveField.toDate();
-                else if (lastActiveField instanceof Date) lastActiveDate = lastActiveField;
-                else if (typeof lastActiveField === 'number') lastActiveDate = new Date(lastActiveField);
-                else return false;
-                const elapsedMinutes = (Date.now() - lastActiveDate.getTime()) / (1000 * 60);
-                if (elapsedMinutes > TIMEOUT_MINUTES) {
-                    try { await deleteDoc(doc(db, ROOM_COLLECTION, roomIdToCheck)); } catch (e) { console.error("Failed to delete expired room:", e); }
-                    return true;
-                }
-                return false;
-            } catch (e) {
-                console.error("checkAndDeleteIfExpired error:", e);
-                return false;
-            }
-        }
-
         async function validateCommander(name){
             if(!name) return null;
             try{
@@ -362,6 +336,32 @@
                     });
                 }
             }catch(e){ console.error("Autocomplete error:", e); }
+        }
+
+        /**
+         * Check room lastActive and delete if expired.
+         * Returns true if the room was deleted, false otherwise.
+         */
+        async function checkAndDeleteIfExpired(roomIdToCheck, roomData) {
+            try {
+                if (!roomData) return false;
+                const lastActiveField = roomData.lastActive;
+                let lastActiveDate = null;
+                if (!lastActiveField) return false;
+                if (typeof lastActiveField.toDate === 'function') lastActiveDate = lastActiveField.toDate();
+                else if (lastActiveField instanceof Date) lastActiveDate = lastActiveField;
+                else if (typeof lastActiveField === 'number') lastActiveDate = new Date(lastActiveField);
+                else return false;
+                const elapsedMinutes = (Date.now() - lastActiveDate.getTime()) / (1000 * 60);
+                if (elapsedMinutes > TIMEOUT_MINUTES) {
+                    try { await deleteDoc(doc(db, ROOM_COLLECTION, roomIdToCheck)); } catch (e) { console.error("Failed to delete expired room:", e); }
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.error("checkAndDeleteIfExpired error:", e);
+                return false;
+            }
         }
 
         // ----------------------------------------------------------------------
@@ -648,6 +648,7 @@
                 const infectVal = player.infect || 0;
 
                 // Build per-opponent commander damage rows for this player (damage this player has taken from each opponent)
+                // We'll render these rows only inside the toggled cmd-controls (no duplicate visible rows)
                 let perOppRows = '';
                 const opponents = playerIds.filter(id => id !== playerId);
                 if(opponents.length > 0){
@@ -665,8 +666,6 @@
                             </div>
                         `;
                     });
-                } else {
-                    perOppRows = `<div style="color:var(--muted);font-size:0.9em">No opponents yet</div>`;
                 }
 
                 // Infect controls (compact, next to value)
@@ -711,9 +710,8 @@
                                         ${infectControlsHtml}
                                     </div>
 
-                                    <div class="per-opp-container" id="per-opp-${playerId}">
-                                        ${perOppRows}
-                                    </div>
+                                    <!-- per-opponent rows removed from main view to avoid duplication.
+                                         They are rendered only inside the toggled cmd-controls below. -->
                                 </div>
                             </div>
 
@@ -737,7 +735,7 @@
                         <div class="cmd-controls" id="cmd-controls-${playerId}">
                             <div style="display:flex;flex-direction:column;gap:8px">
                                 <div style="font-weight:700;color:var(--muted);font-size:0.9em">Edit this player's commander damage values</div>
-                                <div style="max-height:160px;overflow:auto">
+                                <div class="per-opp-container" id="per-opp-${playerId}">
                                     ${perOppRows}
                                 </div>
                             </div>
