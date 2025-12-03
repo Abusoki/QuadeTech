@@ -143,7 +143,7 @@
     };
     const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
     const SCRYFALL_AUTOCOMPLETE_API = "https://api.scryfall.com/cards/autocomplete?q=";
-    const TIMEOUT_MINUTES = 20; // changed to 20 minutes as requested
+    const TIMEOUT_MINUTES = 20; // changed to 20 minutes per request
     const DELETE_ALL_PWD = "DeleteAllRooms";
     const AUTOCOMPLETE_DEBOUNCE_MS = 100;
 
@@ -152,7 +152,7 @@
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import {
       getFirestore, doc, setDoc, getDoc, onSnapshot, serverTimestamp,
-      arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc
+      arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc, where
     } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // GLOBALS
@@ -166,6 +166,7 @@
     let autocompleteTimeout = null;
     const ROOM_COLLECTION = "mtg_rooms";
     const openCmdControls = new Set();
+    let roomTimeoutWatcher = null; // watcher for automatic room deletion
 
     function hashPassword(password){ return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex); }
     function getStartingLife(){ return 40; }
@@ -288,6 +289,23 @@
     }
 
     // SETUP VIEW
+    // Helper: format timestamp to readable string
+    function formatTimestamp(ts){
+      if(!ts) return 'Unknown';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleString();
+    }
+
+    // Helper: compute time left in ms until timeout
+    function timeLeftMs(createdAt, lastActivity){
+      // The room should close after TIMEOUT_MINUTES since lastActivity (or since createdAt if lastActivity missing)
+      const base = lastActivity?.toDate ? lastActivity.toDate() : (lastActivity ? new Date(lastActivity) : null);
+      const created = createdAt?.toDate ? createdAt.toDate() : (createdAt ? new Date(createdAt) : null);
+      const reference = base || created || new Date();
+      const deadline = new Date(reference.getTime() + TIMEOUT_MINUTES * 60 * 1000);
+      return Math.max(0, deadline.getTime() - Date.now());
+    }
+
     async function renderSetupView(){
       const appContainer = document.getElementById("app-container");
       const statusMessage = document.getElementById("status-message");
@@ -322,34 +340,21 @@
             const ownerCmdName = ownerPlayer?.commanderName || ownerPlayer?.commander || 'N/A';
             const ownerCmdImage = ownerPlayer?.commanderImageUrl || '';
             const ownerName = ownerPlayer?.name || 'Owner';
-
-            // compute createdAt and remaining time based on lastLifeChange (or createdAt fallback)
-            let createdAtText = 'Unknown';
-            let timeLeftText = 'Unknown';
-            try{
-              const createdAt = rData.createdAt ? (rData.createdAt.toDate ? rData.createdAt.toDate() : new Date(rData.createdAt)) : null;
-              const lastLife = rData.lastLifeChange ? (rData.lastLifeChange.toDate ? rData.lastLifeChange.toDate() : new Date(rData.lastLifeChange)) : createdAt;
-              if(createdAt){
-                createdAtText = createdAt.toLocaleString();
-                const now = new Date();
-                const elapsedMs = now - (lastLife || createdAt);
-                const timeoutMs = TIMEOUT_MINUTES * 60 * 1000;
-                const remainingMs = Math.max(0, timeoutMs - elapsedMs);
-                const mins = Math.floor(remainingMs / 60000);
-                const secs = Math.floor((remainingMs % 60000) / 1000);
-                timeLeftText = `${mins}m ${secs}s`;
-              }
-            }catch(e){ console.warn("Time parse error", e); }
-
-            // Keep original layout but change the small preview label to "Show CMD"
+            const createdAt = rData.createdAt;
+            const lastActivity = rData.lastActivity;
+            const leftMs = timeLeftMs(createdAt, lastActivity);
+            const minutesLeft = Math.floor(leftMs / 60000);
+            const secondsLeft = Math.floor((leftMs % 60000) / 1000);
+            const timeLeftText = leftMs > 0 ? `${minutesLeft}m ${secondsLeft}s` : 'Closing soon';
+            const createdText = createdAt ? formatTimestamp(createdAt) : 'Unknown';
             listHtml += `
               <div class="room-item" style="display:flex;justify-content:space-between;align-items:center;background-color:#121416;padding:12px;margin-bottom:8px;border-radius:8px;border:1px solid var(--dark-border)">
                 <div class="room-info">
                   <div style="font-weight:800;color:var(--text)">${rId}</div>
                   <div style="font-size:.9em;color:var(--muted);margin-top:6px">
                     ${pCount} Player(s) • Owner: ${ownerName}
-                    <span class="lobby-cmd-name" data-img-url="${ownerCmdImage}" title="Show CMD" style="cursor:help;margin-left:8px;color:var(--muted)">[Show CMD]</span>
-                    <div style="margin-top:6px;font-size:.85em;color:var(--muted)">Created: ${createdAtText} • Closes in: ${timeLeftText}</div>
+                    <span class="lobby-cmd-name" data-img-url="${ownerCmdImage}" style="cursor:help;margin-left:8px;color:var(--muted)">[${ownerCmdName}]</span>
+                    <div style="margin-top:6px;font-size:.85em;color:var(--muted)">Created: <strong style="color:var(--text)">${createdText}</strong> • Closes in: <strong style="color:var(--text)" data-room="${rId}" class="room-time-left">${timeLeftText}</strong></div>
                   </div>
                 </div>
                 <div><button class="join-btn btn-secondary" data-rid="${rId}" style="width:auto">Join</button></div>
@@ -373,7 +378,6 @@
         const previewCardEl = document.getElementById('lobby-card-preview');
         const previewImgEl = document.getElementById('preview-img');
 
-        // show preview on hover (same behavior as original, label changed to Show CMD)
         listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan=>{
           const imageUrl = cmdSpan.dataset.imgUrl;
           cmdSpan.addEventListener('mouseenter', ()=>{
@@ -384,6 +388,29 @@
           });
         });
       }
+
+      // Update countdowns every second for displayed rooms
+      const countdownInterval = setInterval(()=>{
+        document.querySelectorAll('.room-time-left').forEach(el=>{
+          const rid = el.dataset.room;
+          // find the doc data again quickly (we could cache, but keep minimal)
+          // fetch doc once per interval per room is heavy; instead, if the room list is small it's acceptable.
+          getDoc(doc(db, ROOM_COLLECTION, rid)).then(snap=>{
+            if(!snap.exists()){ el.textContent = 'Closed'; return; }
+            const data = snap.data();
+            const leftMs = timeLeftMs(data.createdAt, data.lastActivity);
+            if(leftMs <= 0) el.textContent = 'Closing soon';
+            else {
+              const m = Math.floor(leftMs / 60000);
+              const s = Math.floor((leftMs % 60000) / 1000);
+              el.textContent = `${m}m ${s}s`;
+            }
+          }).catch(()=>{ /* ignore */ });
+        });
+      }, 1000);
+
+      // Clean up interval when navigating away
+      window.addEventListener('hashchange', ()=> clearInterval(countdownInterval), { once: true });
 
       document.getElementById("search-btn").onclick = async ()=>{
         const val = document.getElementById("search-input").value.trim().toLowerCase();
@@ -433,4 +460,22 @@
       const preview = document.getElementById('chat-card-preview');
       const img = document.getElementById('chat-preview-img');
       const t = document.getElementById('chat-preview-title');
-      img.src = imageUrl; t.textContent = title; preview
+      img.src = imageUrl; t.textContent = title; preview.style.display = 'block';
+    }
+    function hideChatCardPreviewWithDelay(){ if(chatPreviewHideTimer) clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = setTimeout(()=>{ hideChatCardPreviewImmediate(); }, 300); }
+    function hideChatCardPreviewImmediate(){ const preview = document.getElementById('chat-card-preview'); const img = document.getElementById('chat-preview-img'); const t = document.getElementById('chat-preview-title'); preview.style.display = 'none'; img.src = ''; t.textContent = ''; if(chatPreviewHideTimer){ clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = null; } }
+
+    function renderRoomView(roomData){
+      const appContainer = document.getElementById("app-container");
+      const statusMessage = document.getElementById("status-message");
+      document.getElementById('lobby-card-preview').style.display = 'none';
+      document.getElementById('card-search-modal').style.display = 'none';
+      const currentPlayerName = roomData.players[userId]?.name || 'You';
+      statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
+
+      let html = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+          <div>
+            <h2 style="margin:0;color:var(--text)">Room: ${roomId}</h2>
+            <div style="color:var(--muted);font-size:.9rem;margin-top:6px">Players: ${Object.keys(roomData.players).length}</div>
+          </
