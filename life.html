@@ -22,6 +22,7 @@
             padding: 25px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             border-radius: 12px;
+            position: relative; /* Needed for suggestions list positioning */
         }
         
         /* --- General Styles --- */
@@ -43,9 +44,9 @@
             transition: transform 0.1s, opacity 0.2s;
         }
 
-        /* --- NEW: Active/Tapped State Class for Fast Feedback --- */
+        /* --- Active/Tapped State Class for Fast Feedback --- */
         button:active,
-        .tapped { /* Ensures the effect works on click/tap */
+        .tapped { 
             transform: scale(0.96);
         }
         
@@ -121,7 +122,7 @@
             cursor: help;
         }
         
-        /* --- NEW: Tooltip/Card Hover Styles --- */
+        /* --- Tooltip/Card Hover Styles (Default: Above) --- */
         .card-tooltip {
             visibility: hidden;
             width: 250px;
@@ -131,14 +132,20 @@
             border-radius: 6px;
             padding: 5px;
             position: absolute;
-            z-index: 1;
-            bottom: 125%; /* Position the tooltip above the text */
+            z-index: 10; /* Ensure tooltip is above other elements */
+            bottom: 125%; /* Position the tooltip ABOVE the text */
             left: 50%;
             margin-left: -125px; /* Center the tooltip */
             opacity: 0;
             transition: opacity 0.3s;
-            pointer-events: none; /* Allows clicks to pass through */
+            pointer-events: none; 
             border: 2px solid #2980b9;
+        }
+        
+        /* --- Tooltip Class for positioning BELOW --- */
+        .card-tooltip.bottom {
+            top: 125%; /* Position the tooltip BELOW the text */
+            bottom: auto; 
         }
 
         .card-tooltip img {
@@ -202,6 +209,31 @@
             color: #ff5555; /* Brighter red for lethal */
             border-color: #ff5555;
         }
+
+        /* --- Suggestions List Styles --- */
+        #suggestions-list {
+            position: absolute;
+            width: calc(100% - 50px); /* Match input width */
+            background-color: #383838;
+            border: 1px solid #2980b9;
+            border-top: none;
+            max-height: 150px;
+            overflow-y: auto;
+            z-index: 100; 
+            border-radius: 0 0 6px 6px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            margin-top: -10px; /* Pull it up under the input */
+            left: 25px; /* Match padding */
+        }
+        .suggestion-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            color: #f0f0f0;
+        }
+        .suggestion-item:hover {
+            background-color: #2980b9;
+        }
+
 
         /* --- Lobby Features --- */
         #lobby-features button {
@@ -272,7 +304,7 @@
             width: 100%;
             height: 100%;
             background-color: rgba(0, 0, 0, 0.7);
-            display: none; /* Crucial: This is the default hidden state */
+            display: none; 
             justify-content: center;
             align-items: center;
             z-index: 1000;
@@ -353,6 +385,7 @@
             appId: "1:36730058988:web:757e2d9620593b4f65022a"
         };
         const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
+        const SCRYFALL_AUTOCOMPLETE_API = "https://api.scryfall.com/cards/autocomplete?q=";
         const TIMEOUT_MINUTES = 25; 
         const DELETE_ALL_PWD = "DeleteAllRooms"; 
         
@@ -373,6 +406,7 @@
         let userId = null;
         let roomId = null;
         let unsubscribe = null;
+        let autocompleteTimeout = null;
         const ROOM_COLLECTION = "mtg_rooms";
 
         // ----------------------------------------------------------------------
@@ -425,6 +459,39 @@
                 return null;
             }
         }
+        
+        /**
+         * Fetches and displays autocomplete suggestions for commander input.
+         * @param {string} query - The current text in the commander input field.
+         */
+        async function fetchAutocompleteSuggestions(query) {
+            const suggestionsList = document.getElementById('suggestions-list');
+            if (!suggestionsList) return;
+            suggestionsList.innerHTML = '';
+            
+            if (query.length < 2) return; 
+
+            try {
+                const response = await fetch(`${SCRYFALL_AUTOCOMPLETE_API}${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                if (response.ok && data.data && data.data.length > 0) {
+                    data.data.slice(0, 5).forEach(suggestion => {
+                        const item = document.createElement('div');
+                        item.classList.add('suggestion-item');
+                        item.textContent = suggestion;
+                        item.onclick = () => {
+                            document.getElementById('commander-input').value = suggestion;
+                            suggestionsList.innerHTML = ''; // Clear suggestions after selection
+                        };
+                        suggestionsList.appendChild(item);
+                    });
+                }
+            } catch (e) {
+                console.error("Autocomplete error:", e);
+            }
+        }
+
 
         // ----------------------------------------------------------------------
         // 5. GAME LOGIC & RENDERING
@@ -512,13 +579,17 @@
                     lifeDisplayHtml = `<span class="life-total">${player.life}</span>`;
                 }
                 
-                // NEW: Commander Name with Hover
+                // Commander Name with Hover
                 const commanderName = player.commanderName || player.commander || 'N/A';
-                const commanderHtml = player.commanderImageUrl ? `
-                    <div class="cmd-name">
+                
+                // Use a generic placeholder if image URL is missing
+                const commanderImage = player.commanderImageUrl || '';
+
+                const commanderHtml = commanderImage ? `
+                    <div class="cmd-name" id="cmd-name-${playerId}">
                         [${commanderName}]
                         <span class="card-tooltip">
-                            <img src="${player.commanderImageUrl}" alt="${commanderName}">
+                            <img src="${commanderImage}" alt="${commanderName}">
                         </span>
                     </div>
                 ` : `<div class="cmd-name">[${commanderName}]</div>`;
@@ -615,9 +686,27 @@
 
 
             // --- ATTACH LISTENERS ---
+            
+            // Tooltip Cutoff Fix
+            playerIds.forEach(playerId => {
+                const cmdElement = document.getElementById(`cmd-name-${playerId}`);
+                if (cmdElement) {
+                    const rect = cmdElement.getBoundingClientRect();
+                    const tooltip = cmdElement.querySelector('.card-tooltip');
+                    
+                    if (tooltip) {
+                        // Check if the element is in the top 30% of the viewport (or less than 200px from top)
+                        if (rect.top < 200) { 
+                            tooltip.classList.add('bottom');
+                        } else {
+                            tooltip.classList.remove('bottom');
+                        }
+                    }
+                }
+            });
+
             document.querySelectorAll('.btn-life').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    // NEW LOGIC: Add/Remove 'tapped' class for fast feedback
                     e.target.classList.add('tapped');
                     setTimeout(() => {
                         e.target.classList.remove('tapped');
@@ -629,7 +718,6 @@
 
             document.querySelectorAll('.btn-damage').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    // NEW LOGIC: Add/Remove 'tapped' class for fast feedback
                     e.target.classList.add('tapped');
                     setTimeout(() => {
                         e.target.classList.remove('tapped');
@@ -893,11 +981,36 @@
                 <h2 style="color:#f0f0f0;">${title}</h2>
                 <input type="text" id="player-name-input" placeholder="Your Player Name">
                 <input type="text" id="commander-input" placeholder="Your Commander's Name (Required)">
-                <input type="password" id="pwd-input" placeholder="Room Password">
+                <div id="suggestions-list"></div> <input type="password" id="pwd-input" placeholder="Room Password">
                 <button id="action-btn" class="btn-primary">${btnText}</button>
                 <button id="cancel-btn" class="btn-danger">Cancel</button> 
                 <p id="err-msg" style="color:#ff5555;"></p>
             `;
+            
+            // --- Commander Input Autocomplete Listener ---
+            const commanderInput = document.getElementById('commander-input');
+            const suggestionsList = document.getElementById('suggestions-list');
+            
+            commanderInput.addEventListener('input', () => {
+                const query = commanderInput.value.trim();
+                if (autocompleteTimeout) clearTimeout(autocompleteTimeout);
+                
+                if (query.length >= 2) {
+                    autocompleteTimeout = setTimeout(() => {
+                        fetchAutocompleteSuggestions(query);
+                    }, 300); // Debounce to prevent flooding Scryfall API
+                } else {
+                    suggestionsList.innerHTML = '';
+                }
+            });
+
+            // Clear suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                if(suggestionsList && !commanderInput.contains(e.target) && !suggestionsList.contains(e.target)) {
+                    suggestionsList.innerHTML = '';
+                }
+            });
+            // ----------------------------------------------------
             
             document.getElementById("cancel-btn").onclick = () => {
                 window.history.pushState({}, document.title, window.location.pathname); 
@@ -1118,7 +1231,6 @@
         document.getElementById('modal-search-btn').addEventListener('click', async () => {
             const cardName = document.getElementById('modal-card-name').value.trim();
             const resultsDiv = document.getElementById('search-results');
-            // Set initial searching message color
             resultsDiv.innerHTML = '<p style="color:#f0f0f0;">Searching...</p>';
 
             if (!cardName) {
@@ -1133,7 +1245,6 @@
                 if (response.ok) {
                     const imgUrl = data.image_uris?.normal || data.card_faces?.[0]?.image_uris?.normal;
                     if (imgUrl) {
-                        // Success message with card name
                         resultsDiv.innerHTML = `
                             <h4 style="color:#f0f0f0;">${data.name}</h4>
                             <img src="${imgUrl}" alt="${data.name}">
@@ -1142,7 +1253,6 @@
                         resultsDiv.innerHTML = '<p style="color:#f0f0f0;">Card found, but image unavailable.</p>';
                     }
                 } else {
-                    // Error/Not found message
                     resultsDiv.innerHTML = `<p style="color:#f0f0f0;">Card not found. Check spelling.</p>`;
                 }
             } catch (e) {
