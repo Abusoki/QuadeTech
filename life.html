@@ -493,7 +493,8 @@
             document.getElementById('contact-mailto').addEventListener('click', () => {
                 const subject = encodeURIComponent("Contact from MTG Life Tracker");
                 const body = encodeURIComponent("Hi,\n\nI'd like to get in touch regarding...");
-                window.location.href = `mailto:youremail@example.com?subject=${subject}&body=${body}`;
+                // Updated mailto to use the user's requested email
+                window.location.href = `mailto:CardboardBonfire@gmail.com?subject=${subject}&body=${body}`;
             });
         }
 
