@@ -120,7 +120,7 @@
         .btn-danger { background: linear-gradient(180deg,var(--red), #9b2b24); color:white; }
         .btn-secondary { background: linear-gradient(180deg,#3a3a3a,#2f2f2f); color:white; }
 
-        /* --- Player grid / panels (new stylized room view) --- */
+        /* --- Player grid / panels (stylized room view) --- */
         .player-grid {
             display:grid;
             grid-template-columns: repeat(2, 1fr);
@@ -149,35 +149,14 @@
             align-items:center;
             gap:8px;
         }
-        .player-name {
-            font-weight:800;
-            font-size:1rem;
-            color:var(--text);
-        }
-        .player-sub {
-            font-size:0.85rem;
-            color:var(--muted);
-        }
+        .player-name { font-weight:800; font-size:1rem; color:var(--text); }
+        .player-sub { font-size:0.85rem; color:var(--muted); }
 
-        .life-big {
-            font-size:3.2rem;
-            font-weight:900;
-            color:var(--text);
-            letter-spacing: -1px;
-        }
+        .life-big { font-size:3.2rem; font-weight:900; color:var(--text); letter-spacing:-1px; }
 
-        .panel-row {
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            gap:12px;
-        }
+        .panel-row { display:flex; justify-content:space-between; align-items:center; gap:12px; }
 
-        .controls {
-            display:flex;
-            gap:8px;
-            flex-wrap:wrap;
-        }
+        .controls { display:flex; gap:8px; flex-wrap:wrap; }
 
         .control-btn {
             padding:8px 12px;
@@ -207,7 +186,6 @@
         .cmd-label { font-size:0.9rem; color:var(--muted); }
         .cmd-value { font-weight:800; color:#ffb3b3; }
 
-        /* small badge for YOU */
         .you-badge {
             background: linear-gradient(90deg,var(--accent),var(--accent-strong));
             color:white;
@@ -221,7 +199,7 @@
         #lobby-features { margin-top:18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
         #room-footer { margin-top:14px; color:var(--muted); font-size:0.9rem; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
 
-        /* suggestions list (keeps previous fixes) */
+        /* suggestions list */
         .suggestions-list {
             position:absolute;
             width:100%;
@@ -258,6 +236,63 @@
         /* chat */
         #chat-log { height:150px; overflow-y:auto; border:1px solid rgba(255,255,255,0.03); padding:10px; margin-bottom:10px; border-radius:8px; background:#0f1113; font-size:0.9em; }
 
+        /* chat message card tooltip */
+        .chat-message { margin-bottom:6px; display:flex; gap:8px; align-items:center; }
+        .chat-sender { font-weight:800; color:#74b9ff; margin-right:6px; }
+        .chat-sender.system { color:#ffd166; font-weight:900; }
+        .chat-card {
+            display:inline-block;
+            position:relative;
+            cursor:help;
+            color:var(--text);
+            text-decoration:underline dotted rgba(255,255,255,0.08);
+        }
+        .chat-card .card-tooltip {
+            visibility:hidden;
+            width:260px;
+            background-color:#0b0d0f;
+            color:#fff;
+            text-align:center;
+            border-radius:6px;
+            padding:6px;
+            position:absolute;
+            z-index:1200;
+            bottom:125%;
+            left:50%;
+            transform:translateX(-50%);
+            opacity:0;
+            transition:opacity 0.18s ease;
+            pointer-events:none;
+            border:2px solid var(--accent);
+            box-shadow:0 8px 30px rgba(0,0,0,0.6);
+        }
+        .chat-card:hover .card-tooltip { visibility:visible; opacity:1; pointer-events:auto; }
+        .chat-card .card-tooltip img { max-width:100%; height:auto; border-radius:4px; display:block; }
+
+        /* modal (card search) - full screen overlay centered */
+        .modal {
+            position:fixed;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            background-color: rgba(0,0,0,0.6);
+            display:none;
+            justify-content:center;
+            align-items:center;
+            z-index:2000;
+        }
+        .modal-content {
+            background:#16181a;
+            color:var(--text);
+            padding:20px;
+            border-radius:10px;
+            width:92%;
+            max-width:520px;
+            box-shadow:0 12px 40px rgba(0,0,0,0.7);
+            position:relative;
+        }
+
         /* small helpers */
         .muted { color:var(--muted); }
         .row { display:flex; gap:8px; align-items:center; }
@@ -293,15 +328,17 @@
 
     <p id="status-message" class="muted">Initializing...</p>
 
-    <!-- Card search modal (kept) -->
-    <div id="card-search-modal" class="modal" style="display:none; align-items:center; justify-content:center;">
-        <div class="modal-content" style="background:#16181a; color:var(--text); padding:20px; border-radius:8px; width:90%; max-width:420px;">
-            <h3>Card Search (Scryfall)</h3>
+    <!-- Card search modal (centered overlay) -->
+    <div id="card-search-modal" class="modal" aria-hidden="true">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">Card Search (Scryfall)</h3>
             <input type="text" id="modal-card-name" placeholder="Enter card name" autocomplete="off">
             <div id="modal-suggestions-list" class="suggestions-list"></div>
-            <button id="modal-search-btn" class="btn-primary">Search</button>
-            <div id="search-results"></div>
-            <button id="modal-close-btn" class="btn-danger">Close</button>
+            <div style="display:flex; gap:8px; margin-top:10px;">
+                <button id="modal-search-btn" class="btn-primary">Search</button>
+                <button id="modal-close-btn" class="btn-secondary">Close</button>
+            </div>
+            <div id="search-results" style="margin-top:12px;"></div>
         </div>
     </div>
 
@@ -448,8 +485,8 @@
 
         // --- Page: Changes (simple changelog viewer) ---
         const CHANGELOG = [
-            { version: "0.9.2", date: "2025-11-30", notes: "Fixed hover preview and removed stray focus outlines; improved suggestions styling." },
-            { version: "0.9.0", date: "2025-10-12", notes: "Initial public beta: room creation, chat, commander validation via Scryfall." }
+            { version: "0.9.3", date: "2025-12-03", notes: "CMD DMG toggle persistence and improved Card Search posting to chat." },
+            { version: "0.9.2", date: "2025-11-30", notes: "Fixed hover preview and removed stray focus outlines; improved suggestions styling." }
         ];
 
         function renderChanges() {
@@ -624,16 +661,42 @@
             const chatLogDiv = document.getElementById('chat-log');
             if (!chatLogDiv) return;
             chatLogDiv.innerHTML = '';
-            const displayLog = (chatLog || []).slice(-20);
+            const displayLog = (chatLog || []).slice(-200); // keep more history
             displayLog.forEach(msg => {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('chat-message');
+
                 const senderSpan = document.createElement('span');
                 senderSpan.classList.add('chat-sender');
-                senderSpan.textContent = `${msg.senderName}:`;
-                if (msg.senderName === playerName) senderSpan.style.color = '#74b9ff';
+                if (msg.senderName === 'System') {
+                    senderSpan.classList.add('system');
+                    senderSpan.textContent = `System:`;
+                } else {
+                    senderSpan.textContent = `${msg.senderName}:`;
+                }
+
                 messageDiv.appendChild(senderSpan);
-                messageDiv.appendChild(document.createTextNode(' ' + msg.message));
+
+                // If message contains a cardImageUrl, render hoverable card element
+                if (msg.cardImageUrl) {
+                    const cardSpan = document.createElement('span');
+                    cardSpan.classList.add('chat-card');
+                    cardSpan.textContent = ` ${msg.message} `;
+
+                    const tooltip = document.createElement('span');
+                    tooltip.classList.add('card-tooltip');
+                    const img = document.createElement('img');
+                    img.src = msg.cardImageUrl;
+                    img.alt = msg.message;
+                    tooltip.appendChild(img);
+                    cardSpan.appendChild(tooltip);
+
+                    messageDiv.appendChild(cardSpan);
+                } else {
+                    // plain text message
+                    messageDiv.appendChild(document.createTextNode(' ' + msg.message));
+                }
+
                 chatLogDiv.appendChild(messageDiv);
             });
             chatLogDiv.scrollTop = chatLogDiv.scrollHeight;
@@ -665,7 +728,6 @@
 
             // Player grid
             const playerIds = Object.keys(roomData.players);
-            // sort so current user appears first
             playerIds.sort((a,b) => (a === userId ? -1 : b === userId ? 1 : 0));
 
             html += `<div class="player-grid">`;
@@ -674,9 +736,6 @@
                 const player = roomData.players[playerId];
                 const isMe = playerId === userId;
                 const life = player.life ?? getStartingLife();
-                const cmdDamageMap = player.commanderDamage || {};
-                // compute total commander damage taken from others (sum of incoming damage)
-                // For display we will show per-opponent damage only when viewing a player's panel (kept simple)
                 const commanderName = player.commanderName || player.commander || 'N/A';
 
                 html += `
@@ -762,7 +821,7 @@
 
                 <div id="room-footer">
                     <div class="muted">This view is styled for quick tabletop play. Your state is saved to the room in Firebase.</div>
-                    <div class="muted">Tip: Hover commander names to preview cards.</div>
+                    <div class="muted">Tip: Use Card Search to post a card to chat; hover the card name to preview it.</div>
                 </div>
             `;
 
@@ -778,18 +837,16 @@
                     const targetPlayer = btn.dataset.player;
                     const delta = parseInt(btn.dataset.delta || '0');
 
-                    // life adjustments: only allowed for current player (isMe)
                     if (action === 'life') {
                         if (targetPlayer === userId) {
                             updateLife(delta);
-                        } else {
-                            // disabled by attribute; do nothing
                         }
                     } else if (action === 'cmd-toggle') {
+                        // Toggle persistent CMD DMG controls: stay open until clicked again
                         const controls = document.getElementById(`cmd-controls-${targetPlayer}`);
-                        if (controls) controls.style.display = (controls.style.display === 'none') ? 'block' : 'none';
+                        if (!controls) return;
+                        controls.style.display = (controls.style.display === 'none' || controls.style.display === '') ? 'block' : 'none';
                     } else if (action === 'show-commander') {
-                        // show preview in fixed left preview if image exists
                         const imgUrl = roomData.players[targetPlayer]?.commanderImageUrl;
                         const previewCard = document.getElementById('lobby-card-preview');
                         const previewImg = document.getElementById('preview-img');
@@ -802,13 +859,9 @@
                         const input = document.getElementById(`cmd-input-${targetPlayer}`);
                         if (input) {
                             const val = parseInt(input.value) || 0;
-                            // set incoming damage from current user to targetPlayer
-                            // updateCmdDamageDirectly expects oppId and newValue for current user
-                            // Here we treat oppId as the opponent (targetPlayer) for the current player's commanderDamage map
                             updateCmdDamageDirectly(targetPlayer, val);
                         }
                     } else if (action === 'cmd-add') {
-                        // increment by 1
                         updateCmdDamage(targetPlayer, +1);
                     } else if (action === 'cmd-sub') {
                         updateCmdDamage(targetPlayer, -1);
@@ -836,9 +889,11 @@
                 document.getElementById('roll-result').textContent = roll;
             });
 
-            // card search modal
+            // card search modal (centered overlay)
             document.getElementById('card-search-btn').addEventListener('click', () => {
-                document.getElementById('card-search-modal').style.display = 'flex';
+                const modal = document.getElementById('card-search-modal');
+                modal.style.display = 'flex';
+                modal.setAttribute('aria-hidden', 'false');
                 document.getElementById('modal-card-name').value = '';
                 document.getElementById('search-results').innerHTML = '';
             });
@@ -859,27 +914,6 @@
                 roomId = null;
                 window.history.pushState({}, document.title, window.location.pathname);
                 navigateTo('home');
-            });
-
-            // delete / refresh buttons (kept if present)
-            const refreshBtn = document.getElementById('refresh-btn');
-            if (refreshBtn) refreshBtn.addEventListener('click', () => { if (roomId) listenToRoom(roomId); });
-
-            const deleteBtn = document.getElementById('delete-room-btn');
-            if (deleteBtn) deleteBtn.addEventListener('click', () => {
-                if (confirm("Are you sure you want to delete this room for ALL players?")) deleteRoom(roomId);
-            });
-
-            // commander hover preview wiring (for panels)
-            playerIds.forEach(playerId => {
-                const panel = document.querySelector(`.player-panel[data-player-id="${playerId}"]`);
-                if (panel) {
-                    const previewCard = document.getElementById('lobby-card-preview');
-                    const previewImg = document.getElementById('preview-img');
-                    panel.querySelectorAll('.player-sub').forEach(el => {
-                        // no-op; preview handled by "Preview" button
-                    });
-                }
             });
 
             // expose direct update helpers globally
@@ -907,6 +941,16 @@
             try {
                 await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true });
             } catch (e) { console.error("Error sending chat message:", e); }
+        }
+
+        // New helper: post system card message to chat (includes cardImageUrl)
+        async function postSystemCardToChat(cardName, imageUrl) {
+            if (!roomId) return;
+            const ref = doc(db, ROOM_COLLECTION, roomId);
+            const chatMessage = { senderId: 'system', senderName: 'System', message: cardName, cardImageUrl: imageUrl, timestamp: Date.now() };
+            try {
+                await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true });
+            } catch (e) { console.error("Error posting system card to chat:", e); }
         }
 
         async function updateLifeDirectly(newValue) {
@@ -1167,14 +1211,16 @@
         }
 
         // ----------------------------------------------------------------------
-        // 7. Modal & autocomplete wiring (kept)
+        // 7. Modal & autocomplete wiring (card search now posts to chat as System)
         // ----------------------------------------------------------------------
         const modalCardNameInput = document.getElementById('modal-card-name');
         const modalSuggestionsList = document.getElementById('modal-suggestions-list');
         let modalAutocompleteTimeout = null;
 
         document.getElementById('modal-close-btn').addEventListener('click', () => {
-            document.getElementById('card-search-modal').style.display = 'none';
+            const modal = document.getElementById('card-search-modal');
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
         });
 
         modalCardNameInput.addEventListener('input', () => {
@@ -1185,22 +1231,31 @@
             } else modalSuggestionsList.innerHTML = '';
         });
 
-        document.getElementById('modal-search-btn').addEventListener('click', () => {
+        document.getElementById('modal-search-btn').addEventListener('click', async () => {
             modalSuggestionsList.innerHTML = '';
             const cardName = modalCardNameInput.value.trim();
             const resultsDiv = document.getElementById('search-results');
             resultsDiv.innerHTML = '<p style="color:var(--text);">Searching...</p>';
             if (!cardName) { resultsDiv.innerHTML = '<p style="color:var(--text);">Please enter a card name.</p>'; return; }
-            validateCommander(cardName).then(result => {
+            try {
+                const result = await validateCommander(cardName);
                 if (result) {
-                    resultsDiv.innerHTML = `<h4 style="color:var(--text);">${result.validatedName}</h4><img src="${result.imageUrl}" alt="${result.validatedName}">`;
+                    resultsDiv.innerHTML = `<h4 style="color:var(--text); margin:6px 0 8px 0;">${result.validatedName}</h4><img src="${result.imageUrl}" alt="${result.validatedName}" style="max-width:100%; border-radius:6px;">`;
+                    // Post to chat as System and close modal
+                    await postSystemCardToChat(result.validatedName, result.imageUrl);
+                    // close modal after a short delay so user sees the result
+                    setTimeout(() => {
+                        const modal = document.getElementById('card-search-modal');
+                        modal.style.display = 'none';
+                        modal.setAttribute('aria-hidden', 'true');
+                    }, 600);
                 } else {
                     resultsDiv.innerHTML = `<p style="color:var(--text);">Card not found. Check spelling.</p>`;
                 }
-            }).catch(e => {
+            } catch (e) {
                 resultsDiv.innerHTML = `<p style="color:var(--text);">Error connecting to Scryfall.</p>`;
                 console.error(e);
-            });
+            }
         });
 
         // ----------------------------------------------------------------------
