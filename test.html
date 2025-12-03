@@ -47,7 +47,6 @@
     .player-name{font-weight:800;font-size:1rem;color:var(--text)}
     .player-sub{font-size:.85rem;color:var(--muted)}
     .life-big{font-size:3.2rem;font-weight:900;color:var(--text);letter-spacing:-1px}
-    /* Unified single life input that looks like the big life display */
     .life-input {
       font-size:3.2rem;font-weight:900;color:var(--text);letter-spacing:-1px;
       background:transparent;border:1px solid transparent;padding:6px 10px;border-radius:8px;text-align:center;
@@ -444,7 +443,7 @@
     }
 
     // ----------------------------------------------------------------------
-    // ROOM VIEW
+    // ROOM VIEW & CHAT
     // ----------------------------------------------------------------------
     function renderChat(chatLog, playerName){
       const chatLogDiv = document.getElementById('chat-log');
@@ -496,6 +495,7 @@
       const currentPlayerName = roomData.players[userId]?.name || 'You';
       statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
 
+      // header + controls
       let html = `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
           <div>
@@ -515,10 +515,12 @@
         </div>
       `;
 
+      // Use stable playersOrder if present, otherwise fallback to players keys
       const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
           ? [...roomData.playersOrder]
           : Object.keys(roomData.players || {});
 
+      // Ensure current user is first for convenience but keep stable order for others
       if (playerIds.includes(userId)) {
           const idx = playerIds.indexOf(userId);
           if (idx > 0) {
@@ -538,9 +540,11 @@
         const commanderName = player.commanderName || player.commander || 'N/A';
         const infectVal = player.infect || 0;
 
+        // threshold: eliminated if life <= 0 or incoming from any single opponent >= 21
         const maxSingleIncoming = computeMaxSingleIncomingCmdDamage(roomData, playerId);
         const isEliminated = (life <= 0) || (maxSingleIncoming >= 21);
 
+        // per-opponent rows only inside cmd-controls
         let perOppRows = '';
         const opponents = playerIds.filter(id => id !== playerId);
         if(opponents.length > 0){
@@ -562,6 +566,7 @@
           });
         }
 
+        // Infect controls (compact, next to value) - only allow editing your own infect
         const infectControlsHtml = `
           <div style="display:flex;align-items:center;gap:6px">
             <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-</button>
@@ -674,6 +679,7 @@
       });
       html += `</div>`;
 
+      // Chat full width below player grid
       html += `
         <div id="chat-container">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap">
@@ -697,8 +703,10 @@
 
       appContainer.innerHTML = html;
 
+      // render chat
       renderChat(roomData.chatLog || [], currentPlayerName);
 
+      // reapply openCmdControls state after render
       const playerIdsAfter = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
           ? [...roomData.playersOrder]
           : Object.keys(roomData.players || {});
@@ -708,42 +716,43 @@
         if(controls){ if(openCmdControls.has(pid)) controls.classList.add('open'); else controls.classList.remove('open'); }
       });
 
-      // Attach control button handlers
+      // attach listeners for controls
       document.querySelectorAll('.control-btn').forEach(btn=>{
-        btn.addEventListener('click', async ()=>{
+        btn.addEventListener('click', async (e)=>{
           if (btn.disabled) return;
           const action = btn.dataset.action;
           const targetPlayer = btn.dataset.player;
           const delta = parseInt(btn.dataset.delta || '0');
 
           if(action === 'life'){
-            // optimistic update: update the unified life input/display immediately for YOU
+            // optimistic UI: update immediately for responsiveness
             if (targetPlayer === userId) {
               const lifeInput = document.getElementById(`life-input-${targetPlayer}`);
               if (lifeInput) {
                 const current = parseInt(lifeInput.value || '0');
                 const next = Math.max(0, current + delta);
                 lifeInput.value = next;
-                // apply fade immediately if threshold reached
                 const panel = lifeInput.closest('.player-panel');
                 if (panel) {
-                  if (next <= 0) panel.classList.add('player-eliminated'); else panel.classList.remove('player-eliminated');
+                  const eliminatedNow = (next <= 0);
+                  if (eliminatedNow) panel.classList.add('player-eliminated');
+                  else panel.classList.remove('player-eliminated');
                 }
               }
             } else {
-              // for other players, update their static display optimistically if present
-              const lifeDisplay = document.getElementById(`life-display-${targetPlayer}`);
-              if (lifeDisplay) {
-                const current = parseInt(lifeDisplay.textContent || '0');
+              const lifeEl = document.getElementById(`life-display-${targetPlayer}`);
+              if (lifeEl) {
+                const current = parseInt(lifeEl.textContent || '0');
                 const next = Math.max(0, current + delta);
-                lifeDisplay.textContent = next;
-                const panel = lifeDisplay.closest('.player-panel');
+                lifeEl.textContent = next;
+                const panel = lifeEl.closest('.player-panel');
                 if (panel) {
-                  if (next <= 0) panel.classList.add('player-eliminated'); else panel.classList.remove('player-eliminated');
+                  const eliminatedNow = (next <= 0);
+                  if (eliminatedNow) panel.classList.add('player-eliminated');
+                  else panel.classList.remove('player-eliminated');
                 }
               }
             }
-            // send update to server
             updateLifeForPlayer(targetPlayer, delta);
           }
           else if(action === 'cmd-toggle'){
@@ -779,29 +788,29 @@
         });
       });
 
-      // Unified life input handlers (YOU only)
-      const myLifeInput = document.getElementById(`life-input-${userId}`);
-      if (myLifeInput) {
-        const applyLifeValue = async () => {
-          let val = parseInt(myLifeInput.value);
+      // unified life input handlers (YOU only)
+      const lifeInputEl = document.getElementById(`life-input-${userId}`);
+      if (lifeInputEl) {
+        const applyLifeInput = async () => {
+          let val = parseInt(lifeInputEl.value);
           if (isNaN(val)) return;
           val = Math.max(0, val);
-          // optimistic UI already shows the value; ensure panel fade state
-          const panel = myLifeInput.closest('.player-panel');
+          const panel = lifeInputEl.closest('.player-panel');
           if (panel) {
-            if (val <= 0) panel.classList.add('player-eliminated'); else panel.classList.remove('player-eliminated');
+            if (val <= 0) panel.classList.add('player-eliminated');
+            else panel.classList.remove('player-eliminated');
           }
           await setLifeForPlayerDirect(userId, val);
         };
-        myLifeInput.addEventListener('keydown', (e)=>{
-          if (e.key === 'Enter'){ e.preventDefault(); applyLifeValue(); myLifeInput.blur(); }
+        lifeInputEl.addEventListener('keydown', (e)=>{
+          if(e.key === 'Enter'){ e.preventDefault(); applyLifeInput(); lifeInputEl.blur(); }
         });
-        myLifeInput.addEventListener('blur', applyLifeValue);
+        lifeInputEl.addEventListener('blur', applyLifeInput);
       }
 
-      // cmd-target inputs
+      // inputs for direct edits (opp -> target)
       document.querySelectorAll('.cmd-target-input').forEach(input => {
-        input.addEventListener('change', async () => {
+        input.addEventListener('change', async (e) => {
           if (input.disabled) return;
           const target = input.dataset.target;
           const opp = input.dataset.opp;
@@ -821,7 +830,7 @@
         });
       }
 
-      // roll button
+      // roll dice top button wiring
       const rollBtnTop = document.getElementById('roll-d20-btn-top');
       const rollResultTop = document.getElementById('roll-result-top');
       if(rollBtnTop){
@@ -832,37 +841,52 @@
       }
 
       // card search modal wiring
-      document.getElementById('card-search-btn').addEventListener('click', ()=>{
-        const modal = document.getElementById('card-search-modal'); modal.style.display = 'flex'; modal.setAttribute('aria-hidden','false'); document.getElementById('modal-card-name').value = ''; document.getElementById('search-results').innerHTML = '';
-      });
+      const cardSearchBtn = document.getElementById('card-search-btn');
+      if(cardSearchBtn){
+        cardSearchBtn.addEventListener('click', ()=>{
+          const modal = document.getElementById('card-search-modal'); modal.style.display = 'flex'; modal.setAttribute('aria-hidden','false'); document.getElementById('modal-card-name').value = ''; document.getElementById('search-results').innerHTML = '';
+        });
+      }
 
-      document.getElementById('restart-game-btn').addEventListener('click', async ()=>{ if(!confirm("Restart game: reset all players' life to default and clear all commander damage and infect?")) return; await restartGame(); });
+      const restartBtn = document.getElementById('restart-game-btn');
+      if(restartBtn){
+        restartBtn.addEventListener('click', async ()=>{ if(!confirm("Restart game: reset all players' life to default and clear all commander damage and infect?")) return; await restartGame(); });
+      }
 
-      document.getElementById('share-invite-btn').addEventListener('click', ()=>{
-        const roomUrl = `${window.location.origin}${window.location.pathname}?roomID=${roomId}`;
-        if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(roomUrl).then(()=> alert(`Invite link copied to clipboard: ${roomUrl}`)).catch(err=>console.error(err)); }
-        else { prompt(`Invite link (Copy Manually):`, roomUrl); }
-      });
+      const shareBtn = document.getElementById('share-invite-btn');
+      if(shareBtn){
+        shareBtn.addEventListener('click', ()=>{
+          const roomUrl = `${window.location.origin}${window.location.pathname}?roomID=${roomId}`;
+          if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(roomUrl).then(()=> alert(`Invite link copied to clipboard: ${roomUrl}`)).catch(err=>console.error(err)); }
+          else { prompt(`Invite link (Copy Manually):`, roomUrl); }
+        });
+      }
 
-      document.getElementById('leave-room-btn').addEventListener('click', ()=>{
-        if(unsubscribe) unsubscribe();
-        localStorage.removeItem('currentRoomId');
-        roomId = null;
-        window.history.pushState({}, document.title, window.location.pathname);
-        navigateTo('home');
-      });
+      const leaveBtn = document.getElementById('leave-room-btn');
+      if(leaveBtn){
+        leaveBtn.addEventListener('click', ()=>{
+          if(unsubscribe) unsubscribe();
+          localStorage.removeItem('currentRoomId');
+          roomId = null;
+          window.history.pushState({}, document.title, window.location.pathname);
+          navigateTo('home');
+        });
+      }
 
+      // modal autocomplete wiring
       const modalCardNameInput = document.getElementById('modal-card-name');
       const modalSuggestionsList = document.getElementById('modal-suggestions-list');
       let modalAutocompleteTimeout = null;
-      modalCardNameInput.addEventListener('input', ()=>{
-        const query = modalCardNameInput.value.trim();
-        if(modalAutocompleteTimeout) clearTimeout(modalAutocompleteTimeout);
-        if(query.length >= 2) modalAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name'), AUTOCOMPLETE_DEBOUNCE_MS);
-        else modalSuggestionsList.innerHTML = '';
-      });
+      if(modalCardNameInput){
+        modalCardNameInput.addEventListener('input', ()=>{
+          const query = modalCardNameInput.value.trim();
+          if(modalAutocompleteTimeout) clearTimeout(modalAutocompleteTimeout);
+          if(query.length >= 2) modalAutocompleteTimeout = setTimeout(()=> fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name'), AUTOCOMPLETE_DEBOUNCE_MS);
+          else modalSuggestionsList.innerHTML = '';
+        });
+      }
 
-      document.addEventListener('click', ()=>{});
+      // done wiring
     }
 
     // ----------------------------------------------------------------------
@@ -884,10 +908,10 @@
       catch(e){ console.error("Error posting system card to chat:", e); }
     }
 
-    // Incremental life update (buttons) - only allowed for YOU
+    // Update life: only allow editing your own life. Also update lastLifeChange timestamp so timeout resets.
     async function updateLifeForPlayer(targetPlayerId, delta){
       if(!roomId || !userId) return;
-      if(targetPlayerId !== userId) return;
+      if(targetPlayerId !== userId) return; // only allow editing your own life
       const ref = doc(db, ROOM_COLLECTION, roomId);
       try{
         const snap = await getDoc(ref);
@@ -898,11 +922,12 @@
         const cur = target.life ?? getStartingLife();
         const newLife = cur + delta;
         target.life = newLife;
+        // update lastLifeChange so timeout is based on life changes
         await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp(), lastLifeChange: serverTimestamp() }, { merge: true });
       }catch(e){ console.error("Error updating life for player:", e); }
     }
 
-    // Direct set life (from unified input)
+    // Direct set: from unified input
     async function setLifeForPlayerDirect(targetPlayerId, newLife){
       if(!roomId || !userId) return;
       if(targetPlayerId !== userId) return;
@@ -918,9 +943,10 @@
       }catch(e){ console.error("Error setting life directly:", e); }
     }
 
+    // Infect update: only your own infect (does not affect lastLifeChange)
     async function updateInfect(targetPlayerId, delta){
       if(!roomId || !userId) return;
-      if(targetPlayerId !== userId) return;
+      if(targetPlayerId !== userId) return; // only allow editing your own infect
       const ref = doc(db, ROOM_COLLECTION, roomId);
       try{
         const snap = await getDoc(ref);
@@ -935,6 +961,7 @@
       }catch(e){ console.error("Error updating infect:", e); }
     }
 
+    // Update opponent's outgoing to target (oppId -> targetPlayerId). Only editable when target is you.
     async function updateCmdDamageForTarget(oppId, targetPlayerId, delta){
       if(!roomId || !userId) return;
       if(targetPlayerId !== userId) return;
@@ -954,6 +981,7 @@
       }catch(e){ console.error("Error updating commander damage for target (opp -> target):", e); }
     }
 
+    // direct set: oppId -> targetPlayerId = newValue
     async function updateCmdDamageForTargetDirectly(oppId, targetPlayerId, newValue){
       if(!roomId || !userId) return;
       if(targetPlayerId !== userId) return;
@@ -972,7 +1000,7 @@
     }
 
     // ----------------------------------------------------------------------
-    // RESTART GAME
+    // RESTART GAME: reset life and clear commanderDamage and infect for all players
     // ----------------------------------------------------------------------
     async function restartGame(){
       if(!roomId) return;
@@ -991,13 +1019,14 @@
             infect: 0
           };
         });
+        // reset lastLifeChange to now so timeout restarts
         await setDoc(ref, { players: updates, lastActive: serverTimestamp(), lastLifeChange: serverTimestamp() }, { merge: true });
         alert("Game restarted: life reset, commander damage and infect cleared.");
       }catch(e){ console.error("Failed to restart game:", e); alert("Failed to restart game. Check console."); }
     }
 
     // ----------------------------------------------------------------------
-    // EDIT COMMANDER
+    // EDIT COMMANDER: modal flow
     // ----------------------------------------------------------------------
     function openEditCommanderModal(prefillName=''){
       const modal = document.getElementById('edit-commander-modal');
@@ -1169,6 +1198,11 @@
           localStorage.removeItem('currentRoomId');
           renderSetupView();
         }
+      }, (err)=>{
+        console.error("Realtime listener error:", err);
+        // If the listener fails, fall back to setup view
+        localStorage.removeItem('currentRoomId');
+        renderSetupView();
       });
     }
 
@@ -1179,4 +1213,7 @@
       const password = prompt("Enter the global deletion password to confirm this action:");
       if(password !== DELETE_ALL_PWD){ alert("Incorrect password. All rooms were NOT deleted."); return; }
       if(!confirm("LAST WARNING: Are you absolutely sure you want to delete ALL rooms? This cannot be undone?")) return;
-      document.getElementById("status-message").text
+      document.getElementById("status-message").textContent = "Deleting all rooms...";
+      const roomsRef = collection(db, ROOM_COLLECTION);
+      try{
+        const snapshot = await
