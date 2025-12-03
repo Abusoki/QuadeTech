@@ -143,7 +143,7 @@
     };
     const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
     const SCRYFALL_AUTOCOMPLETE_API = "https://api.scryfall.com/cards/autocomplete?q=";
-    const ROOM_TIMEOUT_MINUTES = 20; // changed to 20 minutes
+    const TIMEOUT_MINUTES = 20; // changed to 20 minutes as requested
     const DELETE_ALL_PWD = "DeleteAllRooms";
     const AUTOCOMPLETE_DEBOUNCE_MS = 100;
 
@@ -318,12 +318,12 @@
             const rData = docSnap.data();
             const rId = docSnap.id;
             const pCount = Object.keys(rData.players || {}).length;
-            const ownerPlayer = rData.players[rData.ownerId];
+            const ownerPlayer = rData.players && rData.ownerId ? rData.players[rData.ownerId] : null;
             const ownerCmdName = ownerPlayer?.commanderName || ownerPlayer?.commander || 'N/A';
             const ownerCmdImage = ownerPlayer?.commanderImageUrl || '';
             const ownerName = ownerPlayer?.name || 'Owner';
 
-            // createdAt and lastLifeChange handling for display
+            // compute createdAt and remaining time based on lastLifeChange (or createdAt fallback)
             let createdAtText = 'Unknown';
             let timeLeftText = 'Unknown';
             try{
@@ -332,8 +332,8 @@
               if(createdAt){
                 createdAtText = createdAt.toLocaleString();
                 const now = new Date();
-                const elapsedMs = now - lastLife;
-                const timeoutMs = ROOM_TIMEOUT_MINUTES * 60 * 1000;
+                const elapsedMs = now - (lastLife || createdAt);
+                const timeoutMs = TIMEOUT_MINUTES * 60 * 1000;
                 const remainingMs = Math.max(0, timeoutMs - elapsedMs);
                 const mins = Math.floor(remainingMs / 60000);
                 const secs = Math.floor((remainingMs % 60000) / 1000);
@@ -341,20 +341,18 @@
               }
             }catch(e){ console.warn("Time parse error", e); }
 
+            // Keep original layout but change the small preview label to "Show CMD"
             listHtml += `
               <div class="room-item" style="display:flex;justify-content:space-between;align-items:center;background-color:#121416;padding:12px;margin-bottom:8px;border-radius:8px;border:1px solid var(--dark-border)">
-                <div class="room-info" style="min-width:0">
-                  <div style="font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px">${rId}</div>
+                <div class="room-info">
+                  <div style="font-weight:800;color:var(--text)">${rId}</div>
                   <div style="font-size:.9em;color:var(--muted);margin-top:6px">
                     ${pCount} Player(s) • Owner: ${ownerName}
-                    <span style="margin-left:8px;color:var(--muted)">[${ownerCmdName}]</span>
+                    <span class="lobby-cmd-name" data-img-url="${ownerCmdImage}" title="Show CMD" style="cursor:help;margin-left:8px;color:var(--muted)">[Show CMD]</span>
                     <div style="margin-top:6px;font-size:.85em;color:var(--muted)">Created: ${createdAtText} • Closes in: ${timeLeftText}</div>
                   </div>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <button class="show-cmd-btn btn-secondary" data-img-url="${ownerCmdImage}" title="Show CMD">Show CMD</button>
-                  <button class="join-btn btn-secondary" data-rid="${rId}" style="width:auto">Join</button>
-                </div>
+                <div><button class="join-btn btn-secondary" data-rid="${rId}" style="width:auto">Join</button></div>
               </div>
             `;
           });
@@ -372,23 +370,17 @@
           btn.addEventListener('click', (e)=> promptPassword(e.target.dataset.rid, 'join'));
         });
 
-        // "Show CMD" hover behavior
         const previewCardEl = document.getElementById('lobby-card-preview');
         const previewImgEl = document.getElementById('preview-img');
 
-        listContainer.querySelectorAll('.show-cmd-btn').forEach(btn=>{
-          const imageUrl = btn.dataset.imgUrl;
-          btn.addEventListener('mouseenter', ()=>{
+        // show preview on hover (same behavior as original, label changed to Show CMD)
+        listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan=>{
+          const imageUrl = cmdSpan.dataset.imgUrl;
+          cmdSpan.addEventListener('mouseenter', ()=>{
             if(imageUrl && previewCardEl && previewImgEl){ previewImgEl.src = imageUrl; previewCardEl.style.display = 'block'; }
           });
-          btn.addEventListener('mouseleave', ()=>{
+          cmdSpan.addEventListener('mouseleave', ()=>{
             if(previewCardEl){ previewCardEl.style.display = 'none'; previewImgEl.src = ''; }
-          });
-          btn.addEventListener('click', ()=>{
-            if(imageUrl && previewCardEl && previewImgEl){
-              if(previewCardEl.style.display === 'block'){ previewCardEl.style.display = 'none'; previewImgEl.src = ''; }
-              else { previewImgEl.src = imageUrl; previewCardEl.style.display = 'block'; }
-            }
           });
         });
       }
@@ -441,402 +433,4 @@
       const preview = document.getElementById('chat-card-preview');
       const img = document.getElementById('chat-preview-img');
       const t = document.getElementById('chat-preview-title');
-      img.src = imageUrl; t.textContent = title; preview.style.display = 'block';
-    }
-    function hideChatCardPreviewWithDelay(){ if(chatPreviewHideTimer) clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = setTimeout(()=>{ hideChatCardPreviewImmediate(); }, 300); }
-    function hideChatCardPreviewImmediate(){ const preview = document.getElementById('chat-card-preview'); const img = document.getElementById('chat-preview-img'); const t = document.getElementById('chat-preview-title'); preview.style.display = 'none'; img.src = ''; t.textContent = ''; if(chatPreviewHideTimer){ clearTimeout(chatPreviewHideTimer); chatPreviewHideTimer = null; } }
-
-    // Helper: subscribe to a room and handle timeout logic
-    async function subscribeToRoom(rId){
-      if(unsubscribe) { unsubscribe(); unsubscribe = null; }
-      roomId = rId;
-      localStorage.setItem('mtg_last_room', roomId);
-      const roomRef = doc(db, ROOM_COLLECTION, roomId);
-      unsubscribe = onSnapshot(roomRef, async (snap) => {
-        if(!snap.exists()){
-          // room deleted
-          alert('Room has been closed or deleted.');
-          localStorage.removeItem('mtg_last_room');
-          roomId = null;
-          if(unsubscribe){ unsubscribe(); unsubscribe = null; }
-          renderSetupView();
-          return;
-        }
-        const roomData = snap.data();
-
-        // Determine last activity time (life changes)
-        const lastLife = roomData.lastLifeChange ? (roomData.lastLifeChange.toDate ? roomData.lastLifeChange.toDate() : new Date(roomData.lastLifeChange)) : (roomData.createdAt ? (roomData.createdAt.toDate ? roomData.createdAt.toDate() : new Date(roomData.createdAt)) : new Date());
-        const now = new Date();
-        const elapsedMs = now - lastLife;
-        const timeoutMs = ROOM_TIMEOUT_MINUTES * 60 * 1000;
-
-        if(elapsedMs >= timeoutMs){
-          // close/delete room automatically
-          try{
-            await deleteDoc(roomRef);
-            localStorage.removeItem('mtg_last_room');
-            if(unsubscribe){ unsubscribe(); unsubscribe = null; }
-            alert(`Room ${roomId} closed due to inactivity.`);
-            roomId = null;
-            renderSetupView();
-            return;
-          }catch(e){ console.error("Error deleting timed-out room:", e); }
-        } else {
-          // schedule a deletion when timeout occurs
-          const remainingMs = timeoutMs - elapsedMs;
-          if(window._roomTimeoutHandle) { clearTimeout(window._roomTimeoutHandle); window._roomTimeoutHandle = null; }
-          window._roomTimeoutHandle = setTimeout(async ()=>{
-            try{ await deleteDoc(roomRef); localStorage.removeItem('mtg_last_room'); if(unsubscribe){ unsubscribe(); unsubscribe = null; } alert(`Room ${roomId} closed due to inactivity.`); roomId = null; renderSetupView(); } catch(e){ console.error("Auto-delete error:", e); }
-          }, remainingMs + 500); // small buffer
-        }
-
-        // render the room UI
-        renderRoomView(roomData);
-      }, (err) => {
-        console.error("Room snapshot error:", err);
-      });
-    }
-
-    // Attempt to rejoin a room without password if the user is already a player in that room
-    async function tryRestoreLastRoom(){
-      const last = localStorage.getItem('mtg_last_room');
-      if(!last) return;
-      try{
-        const snap = await getDoc(doc(db, ROOM_COLLECTION, last));
-        if(!snap.exists()) { localStorage.removeItem('mtg_last_room'); return; }
-        const data = snap.data();
-        if(data.players && data.players[userId]){
-          // user is already in the room; subscribe directly
-          await subscribeToRoom(last);
-        } else {
-          // not a member; do nothing (user must join)
-          localStorage.removeItem('mtg_last_room');
-        }
-      }catch(e){ console.error("Restore room error:", e); }
-    }
-
-    // Update lastLifeChange timestamp when life or commander damage changes
-    async function updateLifeChangeTimestamp(){
-      if(!roomId) return;
-      try{
-        const roomRef = doc(db, ROOM_COLLECTION, roomId);
-        await updateDoc(roomRef, { lastLifeChange: serverTimestamp() });
-      }catch(e){ console.error("Failed to update lastLifeChange:", e); }
-    }
-
-    // Global event delegation to detect life/commander changes and update timestamp
-    document.addEventListener('click', async (e) => {
-      const el = e.target;
-      if(!el) return;
-      // Buttons that change life or commander damage typically have data-action attributes
-      const action = el.dataset?.action;
-      if(action && ['infect-add','infect-sub','cmd-target-add','cmd-target-sub','cmd-target-set','life-add','life-sub'].includes(action)){
-        // call update timestamp after a short delay to allow the underlying handlers to update Firestore
-        setTimeout(()=> updateLifeChangeTimestamp(), 250);
-      }
-      // Join/Leave handlers are elsewhere; ensure leaving clears localStorage
-      if(el.id === 'leave-room-btn'){
-        localStorage.removeItem('mtg_last_room');
-      }
-    });
-
-    // Also watch for numeric input changes for commander damage fields
-    document.addEventListener('change', (e) => {
-      const el = e.target;
-      if(!el) return;
-      if(el.classList && el.classList.contains('cmd-target-input')){
-        // user edited a commander damage input directly
-        setTimeout(()=> updateLifeChangeTimestamp(), 250);
-      }
-    });
-
-    // When rendering a room view, persist the room id so refresh keeps the user in the lobby
-    function renderRoomView(roomData){
-      const appContainer = document.getElementById("app-container");
-      const statusMessage = document.getElementById("status-message");
-      document.getElementById('lobby-card-preview').style.display = 'none';
-      document.getElementById('card-search-modal').style.display = 'none';
-      const currentPlayerName = roomData.players[userId]?.name || 'You';
-      statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
-
-      // persist last room so refresh restores
-      if(roomId) localStorage.setItem('mtg_last_room', roomId);
-
-      let html = `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
-          <div>
-            <h2 style="margin:0;color:var(--text)">Room: ${roomId}</h2>
-            <div style="color:var(--muted);font-size:.9rem;margin-top:6px">Players: ${Object.keys(roomData.players).length}</div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button id="card-search-btn" class="btn-secondary">Card Search</button>
-            <button id="restart-game-btn" class="btn-secondary">Restart Game</button>
-            <button id="share-invite-btn" class="btn-secondary">Share Invite</button>
-            <button id="leave-room-btn" class="btn-danger">Leave Room</button>
-          </div>
-        </div>
-      `;
-
-      const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? [...roomData.playersOrder] : Object.keys(roomData.players || {});
-      if (playerIds.includes(userId)) { const idx = playerIds.indexOf(userId); if (idx > 0) { playerIds.splice(idx, 1); playerIds.unshift(userId); } }
-      else if (roomData.players && roomData.players[userId]) playerIds.unshift(userId);
-
-      html += `<div class="player-grid">`;
-      playerIds.forEach(playerId=>{
-        const player = roomData.players[playerId];
-        if(!player) return;
-        const isMe = playerId === userId;
-        const life = player.life ?? getStartingLife();
-        const commanderName = player.commanderName || player.commander || 'N/A';
-        const infectVal = player.infect || 0;
-
-        // Build per-opponent rows: show the damage that each opponent has dealt to this player.
-        // Value comes from players[oppId].commanderDamage[playerId]
-        let perOppRows = '';
-        const opponents = playerIds.filter(id => id !== playerId);
-        if(opponents.length > 0){
-          opponents.forEach(oppId => {
-            const dmg = (roomData.players[oppId]?.commanderDamage || {})[playerId] || 0;
-            const oppName = roomData.players[oppId]?.name || 'Player';
-            const editable = (playerId === userId);
-            const disabledAttr = editable ? '' : 'disabled';
-            perOppRows += `
-              <div class="per-opp-row" data-target="${playerId}" data-opp="${oppId}">
-                <div class="per-opp-left">From <strong>${oppName}</strong></div>
-                <div class="per-opp-controls">
-                  <button class="control-btn negative small-btn" data-action="cmd-target-sub" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>-</button>
-                  <input type="number" value="${dmg}" data-target="${playerId}" data-opp="${oppId}" class="cmd-target-input" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center" ${disabledAttr}>
-                  <button class="control-btn negative small-btn" data-action="cmd-target-add" data-target="${playerId}" data-opp="${oppId}" ${disabledAttr}>+</button>
-                </div>
-              </div>
-            `;
-          });
-        }
-
-        // Infect controls (only editable for your own player)
-        const infectControlsHtml = `
-          <div style="display:flex;align-items:center;gap:6px">
-            <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-</button>
-            <div class="infect-value" id="infect-${playerId}">${infectVal}</div>
-            <button class="control-btn small-btn" data-action="infect-add" data-player="${playerId}" ${isMe ? '' : 'disabled'}>+</button>
-          </div>
-        `;
-
-        html += `
-          <div class="player-panel" id="panel-${playerId}">
-            <div class="player-header">
-              <div>
-                <div class="player-name">${player.name || 'Player'}</div>
-                <div class="player-sub">${commanderName}</div>
-              </div>
-              <div style="text-align:right">
-                <div class="life-big" id="life-${playerId}">${life}</div>
-                <div style="margin-top:6px">${isMe ? '<span class="you-badge">YOU</span>' : ''}</div>
-              </div>
-            </div>
-
-            <div class="cmd-block">
-              <div>
-                <div class="cmd-label">Commander Damage To Others</div>
-                <div class="cmd-value">${computeOutgoingTotal(roomData, playerId)}</div>
-              </div>
-              <div>
-                <div class="cmd-label">Commander Damage From Others</div>
-                <div class="cmd-value">${computeIncomingCmdDamage(roomData, playerId)}</div>
-              </div>
-            </div>
-
-            <div class="per-opp-container">
-              ${perOppRows}
-            </div>
-
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
-              <div>${infectControlsHtml}</div>
-              <div style="display:flex;gap:8px">
-                <button class="control-btn small-btn" data-action="life-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-</button>
-                <button class="control-btn small-btn" data-action="life-add" data-player="${playerId}" ${isMe ? '' : 'disabled'}>+</button>
-                <button class="control-btn small-btn" data-action="edit-commander" data-player="${playerId}">Edit CMD</button>
-              </div>
-            </div>
-          </div>
-        `;
-      });
-      html += `</div>`;
-
-      // Chat and footer
-      html += `
-        <div id="room-footer">
-          <div class="muted">Room ID: ${roomId}</div>
-          <div class="muted">Created: ${roomData.createdAt ? (roomData.createdAt.toDate ? roomData.createdAt.toDate().toLocaleString() : new Date(roomData.createdAt).toLocaleString()) : 'Unknown'}</div>
-          <div class="muted">Timeout: ${ROOM_TIMEOUT_MINUTES} minutes of inactivity</div>
-        </div>
-      `;
-
-      appContainer.innerHTML = html;
-
-      // Wire up buttons that exist in this snippet (some handlers may be defined elsewhere)
-      document.getElementById('card-search-btn')?.addEventListener('click', ()=>{ document.getElementById('card-search-modal').style.display = 'flex'; });
-      document.getElementById('leave-room-btn')?.addEventListener('click', async ()=>{
-        try{
-          // remove local storage marker and navigate back to lobby
-          localStorage.removeItem('mtg_last_room');
-          if(unsubscribe){ unsubscribe(); unsubscribe = null; }
-          roomId = null;
-          renderSetupView();
-        }catch(e){ console.error(e); }
-      });
-
-      // Attach per-panel control handlers (simple local handlers; actual firestore updates may be elsewhere)
-      // Use event delegation for the player grid
-      const grid = document.querySelector('.player-grid');
-      if(grid){
-        grid.addEventListener('click', async (ev)=>{
-          const btn = ev.target.closest('button');
-          if(!btn) return;
-          const action = btn.dataset.action;
-          if(!action) return;
-          // Basic handlers: update Firestore player fields accordingly
-          try{
-            const roomRef = doc(db, ROOM_COLLECTION, roomId);
-            if(action === 'life-add' || action === 'life-sub'){
-              const pid = btn.dataset.player;
-              const delta = action === 'life-add' ? 1 : -1;
-              const current = (roomData.players?.[pid]?.life) ?? getStartingLife();
-              const newVal = current + delta;
-              await updateDoc(roomRef, { [`players.${pid}.life`]: newVal, lastLifeChange: serverTimestamp() });
-            } else if(action === 'infect-add' || action === 'infect-sub'){
-              const pid = btn.dataset.player;
-              const delta = action === 'infect-add' ? 1 : -1;
-              const current = (roomData.players?.[pid]?.infect) ?? 0;
-              const newVal = Math.max(0, current + delta);
-              await updateDoc(roomRef, { [`players.${pid}.infect`]: newVal, lastLifeChange: serverTimestamp() });
-            } else if(action === 'cmd-target-add' || action === 'cmd-target-sub'){
-              const target = btn.dataset.target;
-              const opp = btn.dataset.opp;
-              const delta = action === 'cmd-target-add' ? 1 : -1;
-              const current = (roomData.players?.[opp]?.commanderDamage?.[target]) || 0;
-              const newVal = Math.max(0, current + delta);
-              await updateDoc(roomRef, { [`players.${opp}.commanderDamage.${target}`]: newVal, lastLifeChange: serverTimestamp() });
-            } else if(action === 'edit-commander'){
-              // open edit modal (existing modal element)
-              const pid = btn.dataset.player;
-              const modal = document.getElementById('edit-commander-modal');
-              const input = document.getElementById('edit-commander-name');
-              input.value = roomData.players?.[pid]?.commanderName || roomData.players?.[pid]?.commander || '';
-              modal.style.display = 'flex';
-              // save handler will update the player's commander (handler defined elsewhere)
-              document.getElementById('edit-commander-save').onclick = async ()=>{
-                const newName = input.value.trim();
-                if(!newName) return;
-                const validated = await validateCommander(newName);
-                const updates = {};
-                updates[`players.${pid}.commanderName`] = validated?.validatedName || newName;
-                if(validated?.imageUrl) updates[`players.${pid}.commanderImageUrl`] = validated.imageUrl;
-                updates.lastLifeChange = serverTimestamp();
-                await updateDoc(roomRef, updates);
-                modal.style.display = 'none';
-              };
-              document.getElementById('edit-commander-cancel').onclick = ()=>{ document.getElementById('edit-commander-modal').style.display = 'none'; };
-            }
-          }catch(err){ console.error("Control action error:", err); }
-        });
-      }
-    }
-
-    // Initialization: sign in anonymously and try to restore last room
-    (async function init(){
-      try{
-        const user = await signInAnonymously(auth);
-        // signInAnonymously returns a promise but onAuthStateChanged will set userId; ensure we capture it
-      }catch(e){ console.warn("Anonymous sign-in may be pending or blocked:", e); }
-
-      onAuthStateChanged(auth, async (u) => {
-        if(u){
-          userId = u.uid;
-          // After auth, try to restore last room if any
-          await tryRestoreLastRoom();
-          // If no room restored, render home
-          const last = localStorage.getItem('mtg_last_room');
-          if(!last) renderHome();
-        } else {
-          userId = null;
-          renderHome();
-        }
-      });
-
-      // initial route
-      const page = (location.hash || '#home').replace('#','') || 'home';
-      setActiveNav(page);
-      if(page === 'home') renderHome(); else if(page === 'changes') renderChanges(); else if(page === 'contact') renderContact();
-    })();
-
-    // Placeholder: promptPassword, deleteAllRooms, and other functions referenced above should exist in the full codebase.
-    // Minimal implementations to avoid runtime errors in this snippet:
-    async function promptPassword(rid, mode){
-      // If the user is already a member, join without password
-      try{
-        const snap = await getDoc(doc(db, ROOM_COLLECTION, rid));
-        if(snap.exists()){
-          const data = snap.data();
-          if(data.players && data.players[userId]){
-            await subscribeToRoom(rid);
-            return;
-          }
-        }
-      }catch(e){ console.error(e); }
-      // Fallback: open a simple prompt for password or create
-      if(mode === 'create'){
-        const create = confirm(`Create room "${rid}"?`);
-        if(!create) return;
-        try{
-          const roomRef = doc(db, ROOM_COLLECTION, rid);
-          const now = serverTimestamp();
-          const initial = {
-            createdAt: now,
-            lastLifeChange: now,
-            ownerId: userId,
-            players: {
-              [userId]: { name: 'You', life: getStartingLife(), commanderName: '', commanderImageUrl: '' }
-            },
-            playersOrder: [userId]
-          };
-          await setDoc(roomRef, initial);
-          await subscribeToRoom(rid);
-        }catch(e){ console.error("Create room error:", e); alert("Failed to create room."); }
-      } else {
-        // join existing room: add player entry (no password flow)
-        try{
-          const roomRef = doc(db, ROOM_COLLECTION, rid);
-          const snap = await getDoc(roomRef);
-          if(!snap.exists()){ alert("Room not found."); return; }
-          const data = snap.data();
-          // add player if not present
-          if(!data.players || !data.players[userId]){
-            const updates = {};
-            updates[`players.${userId}`] = { name: 'You', life: getStartingLife(), commanderName: '', commanderImageUrl: '' };
-            // ensure playersOrder exists
-            const newOrder = Array.isArray(data.playersOrder) ? [...data.playersOrder] : Object.keys(data.players || {});
-            if(!newOrder.includes(userId)) newOrder.push(userId);
-            await updateDoc(roomRef, { ...updates, playersOrder: newOrder, lastLifeChange: serverTimestamp() });
-          }
-          await subscribeToRoom(rid);
-        }catch(e){ console.error("Join room error:", e); alert("Failed to join room."); }
-      }
-    }
-
-    async function deleteAllRooms(){
-      const pwd = prompt("Enter admin password to delete all rooms:");
-      if(pwd !== DELETE_ALL_PWD) { alert("Incorrect password."); return; }
-      try{
-        const snap = await getDocs(query(collection(db, ROOM_COLLECTION), limit(100)));
-        const deletes = [];
-        snap.forEach(s => deletes.push(deleteDoc(doc(db, ROOM_COLLECTION, s.id))));
-        await Promise.all(deletes);
-        alert("Deleted up to 100 rooms.");
-        renderSetupView();
-      }catch(e){ console.error(e); alert("Failed to delete rooms."); }
-    }
-
-  </script>
-</body>
-</html>
+      img.src = imageUrl; t.textContent = title; preview
