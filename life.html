@@ -223,6 +223,19 @@
             border-radius: 6px;
             font-size: 0.9em;
         }
+        
+        /* NEW Title Styles */
+        .app-title {
+            color: #2c3e50;
+            margin-bottom: 5px;
+            font-size: 2em;
+        }
+        .app-subtitle {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+            font-style: italic;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
@@ -438,7 +451,8 @@
                     <div id="roll-result" style="width:40%; text-align:center;">-</div>
                     <button id="turn-order-btn">Determine Turn Order</button>
                     <button id="card-search-btn">Card Search</button>
-                    <button id="share-invite-btn">Share Invite Link</button> </div>
+                    <button id="share-invite-btn">Share Invite Link</button>
+                </div>
                 <button id="leave-room-btn" class="btn-danger">Leave Room</button>
             `;
 
@@ -471,7 +485,7 @@
                 }
             });
             
-            // NEW: Share Invite Link Listener
+            // Share Invite Link Listener
             document.getElementById('share-invite-btn').addEventListener('click', () => {
                 const roomUrl = `${window.location.origin}${window.location.pathname}?roomID=${roomId}`;
 
@@ -487,6 +501,8 @@
             document.getElementById('leave-room-btn').addEventListener('click', () => {
                 if(unsubscribe) unsubscribe();
                 roomId = null;
+                // Clear URL param on leaving room
+                window.history.pushState({}, document.title, window.location.pathname); 
                 renderSetupView();
             });
             
@@ -657,7 +673,7 @@
         
         function promptPassword(rid, mode) {
             const appContainer = document.getElementById("app-container");
-            const title = mode === 'join' ? `Join ${rid}` : `Create ${rid}`;
+            const title = mode === 'join' ? `Join Room: ${rid}` : `Create Room: ${rid}`;
             const btnText = mode === 'join' ? "Enter Game" : "Create Room";
             
             appContainer.innerHTML = `
@@ -666,13 +682,13 @@
                 <input type="text" id="commander-input" placeholder="Your Commander's Name (e.g., Urza)">
                 <input type="password" id="pwd-input" placeholder="Room Password">
                 <button id="action-btn" class="btn-primary">${btnText}</button>
-                <button id="cancel-btn" class="btn-danger">Cancel</button>
-                <p id="err-msg" style="color:red"></p>
+                <button id="cancel-btn" class="btn-danger">Cancel</button> <p id="err-msg" style="color:red"></p>
             `;
             
+            // NEW: Exit/Cancel button listener
             document.getElementById("cancel-btn").onclick = () => {
                 // Clear URL param on cancel
-                window.history.pushState({}, document.title, window.location.pathname);
+                window.history.pushState({}, document.title, window.location.pathname); 
                 renderSetupView();
             };
             
@@ -764,12 +780,11 @@
             roomId = null;
 
             statusMessage.textContent = "Browse rooms or create a new one.";
-            statusMessage.style.color = "#555"; // Set color of status message
+            statusMessage.style.color = "#555"; 
 
             let listHtml = '<p>Loading active rooms...</p>';
             appContainer.innerHTML = `
-                <h2>MTG Lobby</h2>
-                <div style="margin-bottom:20px;">
+                <h1 class="app-title">Cardboard Bonfire 🔥</h1> <p class="app-subtitle">Life tracker for keeping life and bringing people together.</p> <div style="margin-bottom:20px;">
                     <input type="text" id="search-input" placeholder="Enter Room ID to Create/Search">
                     <button id="search-btn" class="btn-primary">Find or Create Room</button>
                 </div>
@@ -878,16 +893,13 @@
         // 6. INIT
         // ----------------------------------------------------------------------
 
-        // NEW: Checks for roomID parameter in URL
         function checkURLParamsAndInitialize() {
             const params = new URLSearchParams(window.location.search);
             const idFromURL = params.get('roomID');
 
             if (idFromURL) {
-                // If a roomID exists in the URL, go straight to the password prompt
                 promptPassword(idFromURL, 'join');
             } else {
-                // Otherwise, show the normal lobby
                 renderSetupView();
             }
         }
@@ -895,7 +907,7 @@
         onAuthStateChanged(auth, user => {
             if(user) {
                 userId = user.uid;
-                checkURLParamsAndInitialize(); // Call new function to start
+                checkURLParamsAndInitialize(); 
             } else {
                 signInAnonymously(auth).catch(e => {
                     document.getElementById("status-message").textContent = "Auth Error: " + e.message;
