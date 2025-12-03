@@ -42,7 +42,10 @@
             font-weight: 600;
             transition: transform 0.1s, opacity 0.2s;
         }
-        button:active {
+
+        /* --- NEW: Active/Tapped State Class for Fast Feedback --- */
+        button:active,
+        .tapped { /* Ensures the effect works on click/tap */
             transform: scale(0.96);
         }
         
@@ -535,12 +538,24 @@
             // --- ATTACH LISTENERS ---
             document.querySelectorAll('.btn-life').forEach(btn => {
                 btn.addEventListener('click', (e) => {
+                    // NEW LOGIC: Add/Remove 'tapped' class for fast feedback
+                    e.target.classList.add('tapped');
+                    setTimeout(() => {
+                        e.target.classList.remove('tapped');
+                    }, 100); 
+
                     updateLife(parseInt(e.target.dataset.val));
                 });
             });
 
             document.querySelectorAll('.btn-damage').forEach(btn => {
                 btn.addEventListener('click', (e) => {
+                    // NEW LOGIC: Add/Remove 'tapped' class for fast feedback
+                    e.target.classList.add('tapped');
+                    setTimeout(() => {
+                        e.target.classList.remove('tapped');
+                    }, 100); 
+                    
                     updateCmdDamage(e.target.dataset.opp, parseInt(e.target.dataset.val));
                 });
             });
