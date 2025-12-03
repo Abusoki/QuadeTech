@@ -61,10 +61,13 @@
     .infect-label{font-size:0.85rem;color:var(--muted)}
     .infect-value{font-weight:800;color:#bfe6a8;min-width:36px;text-align:center}
     .small-btn{padding:6px 8px;font-size:0.85rem;min-width:36px;border-radius:6px}
-    #chat-log{height:300px;overflow-y:auto;border:1px solid rgba(255,255,255,0.03);padding:10px;margin-bottom:10px;border-radius:8px;background:#0f1113;font-size:.95em}
-    .chat-message{margin-bottom:6px;display:flex;gap:8px;align-items:center}
+    #chat-log{height:360px;overflow-y:auto;border:1px solid rgba(255,255,255,0.03);padding:10px;margin-bottom:10px;border-radius:8px;background:#0f1113;font-size:.95em}
+    .chat-message{margin-bottom:6px;display:flex;gap:8px;align-items:center;justify-content:space-between}
+    .chat-left{display:flex;gap:8px;align-items:center;flex:1}
     .chat-sender{font-weight:800;color:#74b9ff;margin-right:6px}
     .chat-sender.system{color:#ffd166;font-weight:900}
+    .chat-time{font-size:.75rem;color:var(--muted);margin-left:8px;min-width:72px;text-align:right}
+    .chat-text{flex:1;color:var(--text);margin-left:6px}
     .chat-card{display:inline-block;position:relative;cursor:pointer;color:var(--text);text-decoration:underline dotted rgba(255,255,255,0.08)}
     #chat-card-preview{position:fixed;top:50%;right:20px;transform:translateY(-50%);width:300px;max-width:40vw;border:3px solid var(--accent);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,0.7);background:#0b0d0f;z-index:1500;display:none;padding:8px}
     #chat-card-preview img{display:block;width:100%;border-radius:6px}
@@ -82,9 +85,7 @@
     .muted{color:var(--muted)}
     .row{display:flex;gap:8px;align-items:center}
     .col{display:flex;flex-direction:column;gap:8px}
-    /* Chat full width container */
     #chat-container{width:100%;margin-top:18px}
-    #chat-controls{display:flex;gap:8px;align-items:center}
     @media(max-width:720px){header.app-header{flex-direction:column;align-items:flex-start;gap:8px}#lobby-card-preview{display:none!important}#chat-card-preview{display:none!important}}
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -135,9 +136,7 @@
   </div>
 
   <script type="module">
-    // ----------------------------------------------------------------------
     // CONFIG
-    // ----------------------------------------------------------------------
     const USER_FIREBASE_CONFIG = {
       apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
       authDomain: "mtg-life-tool.firebaseapp.com",
@@ -147,17 +146,14 @@
       appId: "1:36730058988:web:757e2d9620593b4f65022a"
     };
 
-    // TIMEOUT: set to 20 minutes per request
+    // TIMEOUT: 20 minutes
     const TIMEOUT_MINUTES = 20;
-
     const SCRYFALL_API = "https://api.scryfall.com/cards/named?exact=";
     const SCRYFALL_AUTOCOMPLETE_API = "https://api.scryfall.com/cards/autocomplete?q=";
     const DELETE_ALL_PWD = "DeleteAllRooms";
     const AUTOCOMPLETE_DEBOUNCE_MS = 100;
 
-    // ----------------------------------------------------------------------
     // IMPORTS
-    // ----------------------------------------------------------------------
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import {
@@ -165,9 +161,7 @@
       arrayUnion, deleteDoc, collection, getDocs, query, limit, updateDoc
     } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // ----------------------------------------------------------------------
     // GLOBALS
-    // ----------------------------------------------------------------------
     const app = initializeApp(USER_FIREBASE_CONFIG);
     const auth = getAuth(app);
     const db = getFirestore(app);
@@ -177,15 +171,16 @@
     let unsubscribe = null;
     let autocompleteTimeout = null;
     const ROOM_COLLECTION = "mtg_rooms";
-
-    // Track which players' CMD controls are open (persist across renders)
     const openCmdControls = new Set();
 
-    // ----------------------------------------------------------------------
-    // HELPERS
-    // ----------------------------------------------------------------------
     function hashPassword(password){ return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex); }
     function getStartingLife(){ return 40; }
+
+    function formatTimestamp(ts){
+      if(!ts) return '';
+      const d = (typeof ts === 'number') ? new Date(ts) : (ts instanceof Date ? ts : (typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts)));
+      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
 
     async function validateCommander(name){
       if(!name) return null;
@@ -221,7 +216,7 @@
       }catch(e){ console.error("Autocomplete error:", e); }
     }
 
-    // compute outgoing map for a source player (what this player's commander has done to others)
+    // CMD helpers
     function computeOutgoingCmdDamage(roomData, sourcePlayerId){
       const players = roomData.players || {};
       const order = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? roomData.playersOrder : Object.keys(players || {});
@@ -234,14 +229,10 @@
       });
       return result;
     }
-
-    // compute outgoing total for a source player (sum of their commanderDamage map)
     function computeOutgoingTotal(roomData, sourcePlayerId){
       const dmgMap = (roomData.players?.[sourcePlayerId]?.commanderDamage) || {};
       return Object.keys(dmgMap).reduce((s,k)=> s + (parseInt(dmgMap[k])||0), 0);
     }
-
-    // compute incoming total for a target player
     function computeIncomingCmdDamage(roomData, targetPlayerId){
       let total = 0;
       const players = roomData.players || {};
@@ -253,9 +244,30 @@
       return total;
     }
 
-    // ----------------------------------------------------------------------
-    // ROUTING & PAGES
-    // ----------------------------------------------------------------------
+    // CHAT helpers
+    async function sendChatMessage(message, senderName){
+      if(!roomId || !userId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      const chatMessage = { senderId: userId, senderName, message, timestamp: Date.now() };
+      try{ await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true }); }
+      catch(e){ console.error("Error sending chat message:", e); }
+    }
+    async function postSystemCardToChat(cardName, imageUrl){
+      if(!roomId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      const chatMessage = { senderId: 'system', senderName: 'System', message: cardName, cardImageUrl: imageUrl, timestamp: Date.now() };
+      try{ await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true }); }
+      catch(e){ console.error("Error posting system card to chat:", e); }
+    }
+    async function postSystemMessage(message){
+      if(!roomId) return;
+      const ref = doc(db, ROOM_COLLECTION, roomId);
+      const chatMessage = { senderId: 'system', senderName: 'System', message, timestamp: Date.now() };
+      try{ await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true }); }
+      catch(e){ console.error("Error posting system message:", e); }
+    }
+
+    // ROUTING UI
     const navButtons = { home: document.getElementById('nav-home'), changes: document.getElementById('nav-changes'), contact: document.getElementById('nav-contact') };
     function setActiveNav(page){ Object.values(navButtons).forEach(b=>b.classList.remove('active')); if(navButtons[page]) navButtons[page].classList.add('active'); }
     function navigateTo(page){ if(location.hash !== `#${page}`) history.pushState(null,'',`#${page}`); setActiveNav(page); if(page === 'home') renderHome(); else if(page === 'changes') renderChanges(); else if(page === 'contact') renderContact(); }
@@ -267,8 +279,8 @@
     async function renderHome(){ await renderSetupView(); }
 
     const CHANGELOG = [
-      { version: "0.9.8", date: "2025-12-08", notes: "Show CMD labels, persist lobby on refresh, 20-minute timeout based on life changes, lobby timestamps." },
-      { version: "0.9.7", date: "2025-12-07", notes: "Show CMD DMG to/from on each panel; incoming editor updates opponent's outgoing." }
+      { version: "0.9.9", date: "2025-12-09", notes: "Chat timestamps and system roll messages." },
+      { version: "0.9.8", date: "2025-12-08", notes: "Show CMD labels, persist lobby on refresh, 20-minute timeout based on life changes, lobby timestamps." }
     ];
 
     function renderChanges(){
@@ -306,9 +318,7 @@
       });
     }
 
-    // ----------------------------------------------------------------------
-    // SETUP VIEW (room list + create)
-    // ----------------------------------------------------------------------
+    // SETUP VIEW
     function formatTimeLeft(minutesLeft){
       if(minutesLeft <= 0) return 'closing soon';
       if(minutesLeft < 60) return `${Math.ceil(minutesLeft)}m left`;
@@ -352,14 +362,12 @@
             const ownerCmdImage = ownerPlayer?.commanderImageUrl || '';
             const ownerName = ownerPlayer?.name || 'Owner';
 
-            // compute createdAt and time left until timeout
             let createdAtDate = null;
             if(rData.createdAt){
               if(typeof rData.createdAt.toDate === 'function') createdAtDate = rData.createdAt.toDate();
               else if(rData.createdAt instanceof Date) createdAtDate = rData.createdAt;
               else if(typeof rData.createdAt === 'number') createdAtDate = new Date(rData.createdAt);
             }
-            // prefer lastLifeChange for timeout baseline
             let baselineDate = null;
             if(rData.lastLifeChange){
               if(typeof rData.lastLifeChange.toDate === 'function') baselineDate = rData.lastLifeChange.toDate();
@@ -430,9 +438,7 @@
       document.getElementById("delete-all-rooms-btn").addEventListener('click', deleteAllRooms);
     }
 
-    // ----------------------------------------------------------------------
-    // ROOM VIEW
-    // ----------------------------------------------------------------------
+    // RENDER ROOM VIEW
     function renderChat(chatLog, playerName){
       const chatLogDiv = document.getElementById('chat-log');
       if(!chatLogDiv) return;
@@ -441,24 +447,41 @@
       displayLog.forEach(msg=>{
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('chat-message');
+
+        const left = document.createElement('div');
+        left.classList.add('chat-left');
+
         const senderSpan = document.createElement('span');
         senderSpan.classList.add('chat-sender');
         if(msg.senderName === 'System'){ senderSpan.classList.add('system'); senderSpan.textContent = 'System:'; }
         else senderSpan.textContent = `${msg.senderName}:`;
-        messageDiv.appendChild(senderSpan);
+
+        const textSpan = document.createElement('span');
+        textSpan.classList.add('chat-text');
         if(msg.cardImageUrl){
           const cardSpan = document.createElement('span');
           cardSpan.classList.add('chat-card');
           cardSpan.textContent = ` ${msg.message} `;
           cardSpan.dataset.cardImageUrl = msg.cardImageUrl;
           cardSpan.dataset.cardName = msg.message;
-          messageDiv.appendChild(cardSpan);
-          cardSpan.addEventListener('mouseenter', (e)=>{ showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
-          cardSpan.addEventListener('mouseleave', (e)=>{ hideChatCardPreviewWithDelay(); });
-          cardSpan.addEventListener('click', (e)=>{ const preview = document.getElementById('chat-card-preview'); if(preview.style.display === 'block') hideChatCardPreviewImmediate(); else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          cardSpan.addEventListener('mouseenter', ()=>{ showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          cardSpan.addEventListener('mouseleave', ()=>{ hideChatCardPreviewWithDelay(); });
+          cardSpan.addEventListener('click', ()=>{ const preview = document.getElementById('chat-card-preview'); if(preview.style.display === 'block') hideChatCardPreviewImmediate(); else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          textSpan.appendChild(cardSpan);
         } else {
-          messageDiv.appendChild(document.createTextNode(' ' + msg.message));
+          textSpan.textContent = msg.message;
         }
+
+        left.appendChild(senderSpan);
+        left.appendChild(textSpan);
+
+        const timeSpan = document.createElement('div');
+        timeSpan.classList.add('chat-time');
+        timeSpan.textContent = formatTimestamp(msg.timestamp);
+
+        messageDiv.appendChild(left);
+        messageDiv.appendChild(timeSpan);
+
         chatLogDiv.appendChild(messageDiv);
       });
       chatLogDiv.scrollTop = chatLogDiv.scrollHeight;
@@ -483,7 +506,7 @@
       const currentPlayerName = roomData.players[userId]?.name || 'You';
       statusMessage.innerHTML = `Connected as: <strong>${currentPlayerName}</strong>`;
 
-      // header + controls (roll moved left of Card Search; roll result shown left of button)
+      // header: roll result left of roll button, roll left of Card Search
       let html = `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
           <div>
@@ -503,40 +526,25 @@
         </div>
       `;
 
-      // Use stable playersOrder if present, otherwise fallback to players keys
-      const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
-          ? [...roomData.playersOrder]
-          : Object.keys(roomData.players || {});
-
-      // Ensure current user is first for convenience but keep stable order for others
-      if (playerIds.includes(userId)) {
-          const idx = playerIds.indexOf(userId);
-          if (idx > 0) {
-              playerIds.splice(idx, 1);
-              playerIds.unshift(userId);
-          }
-      } else if (roomData.players && roomData.players[userId]) {
-          playerIds.unshift(userId);
-      }
+      const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? [...roomData.playersOrder] : Object.keys(roomData.players || {});
+      if (playerIds.includes(userId)) { const idx = playerIds.indexOf(userId); if (idx > 0) { playerIds.splice(idx, 1); playerIds.unshift(userId); } }
+      else if (roomData.players && roomData.players[userId]) playerIds.unshift(userId);
 
       html += `<div class="player-grid">`;
       playerIds.forEach(playerId=>{
         const player = roomData.players[playerId];
-        if(!player) return; // skip if player data missing
+        if(!player) return;
         const isMe = playerId === userId;
         const life = player.life ?? getStartingLife();
         const commanderName = player.commanderName || player.commander || 'N/A';
         const infectVal = player.infect || 0;
 
-        // per-opponent rows will be rendered only inside the toggled cmd-controls
         let perOppRows = '';
         const opponents = playerIds.filter(id => id !== playerId);
         if(opponents.length > 0){
           opponents.forEach(oppId => {
-            // value is opponent's outgoing to this player
             const dmg = (roomData.players[oppId]?.commanderDamage || {})[playerId] || 0;
             const oppName = roomData.players[oppId]?.name || 'Player';
-            // only allow editing these incoming values if the target player is you (playerId === userId)
             const editable = (playerId === userId);
             const disabledAttr = editable ? '' : 'disabled';
             perOppRows += `
@@ -552,7 +560,6 @@
           });
         }
 
-        // Infect controls (compact, next to value) - only allow editing your own infect
         const infectControlsHtml = `
           <div style="display:flex;align-items:center;gap:6px">
             <button class="control-btn small-btn" data-action="infect-sub" data-player="${playerId}" ${isMe ? '' : 'disabled'}>-</button>
@@ -561,7 +568,6 @@
           </div>
         `;
 
-        // For the CMD block: show "to" and "from" but hide "from" on YOU panel (per request).
         const outgoingTotal = computeOutgoingTotal(roomData, playerId);
         const incomingTotal = computeIncomingCmdDamage(roomData, playerId);
         let outgoingBreakdownHtml = '';
@@ -578,10 +584,8 @@
           outgoingBreakdownHtml = outgoingHtml;
         }
 
-        // Build cmdBlockInner with conditional "from" visibility for YOU
         let cmdBlockInner = '';
         if (isMe) {
-          // YOU: show only "to" and outgoing breakdown
           cmdBlockInner = `
             <div style="display:flex;flex-direction:column;gap:6px">
               <div style="display:flex;gap:12px;align-items:center">
@@ -594,7 +598,6 @@
             </div>
           `;
         } else {
-          // Others: show both "from" then "to"
           cmdBlockInner = `
             <div style="display:flex;flex-direction:column;gap:6px">
               <div style="display:flex;gap:12px;align-items:center">
@@ -670,7 +673,7 @@
       });
       html += `</div>`; // player-grid
 
-      // Chat full width below player grid
+      // Chat full width
       html += `
         <div id="chat-container">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -694,20 +697,18 @@
 
       appContainer.innerHTML = html;
 
-      // render chat
+      // render chat with timestamps
       renderChat(roomData.chatLog || [], currentPlayerName);
 
       // reapply openCmdControls state after render
-      const playerIdsAfter = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
-          ? [...roomData.playersOrder]
-          : Object.keys(roomData.players || {});
+      const playerIdsAfter = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length ? [...roomData.playersOrder] : Object.keys(roomData.players || {});
       if (playerIdsAfter.includes(userId)) { const idx = playerIdsAfter.indexOf(userId); if (idx > 0) { playerIdsAfter.splice(idx,1); playerIdsAfter.unshift(userId); } }
       playerIdsAfter.forEach(pid => {
         const controls = document.getElementById(`cmd-controls-${pid}`);
         if(controls){ if(openCmdControls.has(pid)) controls.classList.add('open'); else controls.classList.remove('open'); }
       });
 
-      // attach listeners for controls
+      // attach listeners
       document.querySelectorAll('.control-btn').forEach(btn=>{
         btn.addEventListener('click', async (e)=>{
           if (btn.disabled) return;
@@ -771,13 +772,15 @@
         });
       }
 
-      // roll dice top button wiring
+      // roll dice top button wiring: post result to chat as System with timestamp
       const rollBtnTop = document.getElementById('roll-d20-btn-top');
       const rollResultTop = document.getElementById('roll-result-top');
       if(rollBtnTop){
-        rollBtnTop.addEventListener('click', ()=>{
+        rollBtnTop.addEventListener('click', async ()=>{
           const roll = Math.floor(Math.random()*20)+1;
           rollResultTop.textContent = roll;
+          const playerName = (roomData && roomData.players && roomData.players[userId] && roomData.players[userId].name) ? roomData.players[userId].name : 'Player';
+          await postSystemMessage(`${playerName} rolled a D20: ${roll}`);
         });
       }
 
@@ -816,17 +819,7 @@
       document.addEventListener('click', (e)=>{});
     }
 
-    // ----------------------------------------------------------------------
     // CHAT & DATA HELPERS
-    // ----------------------------------------------------------------------
-    async function sendChatMessage(message, senderName){
-      if(!roomId || !userId) return;
-      const ref = doc(db, ROOM_COLLECTION, roomId);
-      const chatMessage = { senderId: userId, senderName, message, timestamp: Date.now() };
-      try{ await setDoc(ref, { chatLog: arrayUnion(chatMessage), lastActive: serverTimestamp() }, { merge: true }); }
-      catch(e){ console.error("Error sending chat message:", e); }
-    }
-
     async function postSystemCardToChat(cardName, imageUrl){
       if(!roomId) return;
       const ref = doc(db, ROOM_COLLECTION, roomId);
@@ -838,7 +831,7 @@
     // Update life: only allow editing your own life. Also update lastLifeChange timestamp so timeout resets.
     async function updateLifeForPlayer(targetPlayerId, delta){
       if(!roomId || !userId) return;
-      if(targetPlayerId !== userId) return; // only allow editing your own life
+      if(targetPlayerId !== userId) return;
       const ref = doc(db, ROOM_COLLECTION, roomId);
       try{
         const snap = await getDoc(ref);
@@ -849,15 +842,13 @@
         const cur = target.life ?? getStartingLife();
         const newLife = cur + delta;
         target.life = newLife;
-        // update lastLifeChange so timeout is based on life changes
         await setDoc(ref, { players: { [targetPlayerId]: target }, lastActive: serverTimestamp(), lastLifeChange: serverTimestamp() }, { merge: true });
       }catch(e){ console.error("Error updating life for player:", e); }
     }
 
-    // Infect update: only your own infect (does not affect lastLifeChange)
     async function updateInfect(targetPlayerId, delta){
       if(!roomId || !userId) return;
-      if(targetPlayerId !== userId) return; // only allow editing your own infect
+      if(targetPlayerId !== userId) return;
       const ref = doc(db, ROOM_COLLECTION, roomId);
       try{
         const snap = await getDoc(ref);
@@ -875,7 +866,6 @@
     // Update opponent's outgoing to target (oppId -> targetPlayerId). Only editable when target is you.
     async function updateCmdDamageForTarget(oppId, targetPlayerId, delta){
       if(!roomId || !userId) return;
-      // only allow editing incoming values for yourself (targetPlayerId must be you)
       if(targetPlayerId !== userId) return;
       const ref = doc(db, ROOM_COLLECTION, roomId);
       try{
@@ -893,7 +883,6 @@
       }catch(e){ console.error("Error updating commander damage for target (opp -> target):", e); }
     }
 
-    // direct set: oppId -> targetPlayerId = newValue
     async function updateCmdDamageForTargetDirectly(oppId, targetPlayerId, newValue){
       if(!roomId || !userId) return;
       if(targetPlayerId !== userId) return;
@@ -911,9 +900,6 @@
       }catch(e){ console.error("Error setting commander damage for target directly (opp -> target):", e); }
     }
 
-    // ----------------------------------------------------------------------
-    // RESTART GAME: reset life and clear commanderDamage and infect for all players
-    // ----------------------------------------------------------------------
     async function restartGame(){
       if(!roomId) return;
       const ref = doc(db, ROOM_COLLECTION, roomId);
@@ -924,26 +910,16 @@
         const players = data.players || {};
         const updates = {};
         Object.keys(players).forEach(pid=>{
-          updates[pid] = {
-            ...players[pid],
-            life: getStartingLife(),
-            commanderDamage: {},
-            infect: 0
-          };
+          updates[pid] = { ...players[pid], life: getStartingLife(), commanderDamage: {}, infect: 0 };
         });
-        // reset lastLifeChange to now so timeout restarts
         await setDoc(ref, { players: updates, lastActive: serverTimestamp(), lastLifeChange: serverTimestamp() }, { merge: true });
         alert("Game restarted: life reset, commander damage and infect cleared.");
       }catch(e){ console.error("Failed to restart game:", e); alert("Failed to restart game. Check console."); }
     }
 
-    // ----------------------------------------------------------------------
-    // EDIT COMMANDER: modal flow
-    // ----------------------------------------------------------------------
     function openEditCommanderModal(prefillName=''){
       const modal = document.getElementById('edit-commander-modal');
-      modal.style.display = 'flex';
-      modal.setAttribute('aria-hidden','false');
+      modal.style.display = 'flex'; modal.setAttribute('aria-hidden','false');
       document.getElementById('edit-commander-name').value = prefillName;
       document.getElementById('edit-commander-result').innerHTML = '';
       const input = document.getElementById('edit-commander-name');
@@ -975,9 +951,7 @@
       };
     }
 
-    // ----------------------------------------------------------------------
     // ROOM CREATION / JOIN / LISTEN
-    // ----------------------------------------------------------------------
     async function checkAndDeleteIfExpired(roomIdToCheck, roomData) {
       try {
         if (!roomData) return false;
@@ -1113,9 +1087,6 @@
       });
     }
 
-    // ----------------------------------------------------------------------
-    // ADMIN / MISC
-    // ----------------------------------------------------------------------
     async function deleteAllRooms(){
       const password = prompt("Enter the global deletion password to confirm this action:");
       if(password !== DELETE_ALL_PWD){ alert("Incorrect password. All rooms were NOT deleted."); return; }
@@ -1137,9 +1108,7 @@
       catch(e){ alert("Failed to delete room. Check console for details."); console.error("Delete room failed:", e); }
     }
 
-    // ----------------------------------------------------------------------
-    // CARD SEARCH MODAL: post to chat as System and show right preview on hover
-    // ----------------------------------------------------------------------
+    // Card search modal wiring
     const modalCardNameInput = document.getElementById('modal-card-name');
     const modalSuggestionsList = document.getElementById('modal-suggestions-list');
     let modalAutocompleteTimeout = null;
@@ -1166,16 +1135,13 @@
       }catch(e){ resultsDiv.innerHTML = `<p style="color:var(--text)">Error connecting to Scryfall.</p>`; console.error(e); }
     });
 
-    // ----------------------------------------------------------------------
-    // INIT: auth + initial route + persist join on refresh
-    // ----------------------------------------------------------------------
+    // INIT
     function initialRoute(){
       const params = new URLSearchParams(window.location.search);
       const idFromURL = params.get('roomID');
       const persistedRoom = localStorage.getItem('currentRoomId');
 
       if(idFromURL){ promptPassword(idFromURL,'join'); setActiveNav('home'); return; }
-
       if(persistedRoom){ listenToRoom(persistedRoom); setActiveNav('home'); return; }
 
       const page = (location.hash || '#home').replace('#','') || 'home';
