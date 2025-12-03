@@ -37,15 +37,8 @@
             background-color: #383838; /* Dark input background */
             color: #f0f0f0; /* Light input text */
         }
-
-        /* Remove platform-specific appearance and tap highlight (mobile) */
-        input, button, textarea, select {
-            -webkit-appearance: none;
-            appearance: none;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        /* Hard-disable all outlines and focus rings across browsers */
+        
+        /* Universal focus removal + focus-visible (Chrome/Edge) */
         *:focus,
         *:focus-visible,
         *:focus-within {
@@ -53,15 +46,21 @@
             box-shadow: none !important; 
             -webkit-box-shadow: none !important;
         }
-
-        /* Keep borders dark on focus and prevent background shift */
+        /* Keep borders dark on focus, prevent any color shift */
         input:focus,
         button:focus {
-            border-color: #444 !important;
+            border-color: #444 !important; 
             background-color: inherit !important;
         }
 
-        /* Chrome/Safari autofill color reset to match dark theme */
+        /* Remove platform-specific appearance and tap highlight */
+        input, button, textarea, select {
+            -webkit-appearance: none;
+            appearance: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Chrome/Safari autofill reset to match dark theme */
         input:-webkit-autofill,
         input:-webkit-autofill:focus,
         input:-webkit-autofill:hover {
@@ -72,7 +71,7 @@
             border: 1px solid #444 !important;
         }
 
-        /* Remove number input spinners for a cleaner look */
+        /* Remove number input spinners */
         input[type="number"]::-webkit-outer-spin-button,
         input[type="number"]::-webkit-inner-spin-button {
             -webkit-appearance: none;
@@ -163,49 +162,14 @@
         .cmd-name {
             font-size: 0.9em;
             color: #aaa; /* Lighter gray for subtext */
-            position: relative; /* Needed for tooltip positioning */
             display: inline-block;
-            cursor: help;
+            cursor: pointer;
         }
         
         /* --- Tooltip/Card Hover Styles (Game View) --- */
         .card-tooltip {
-            visibility: hidden;
-            width: 250px;
-            background-color: #1e1e1e;
-            color: #fff;
-            text-align: center;
-            border-radius: 6px;
-            padding: 5px;
-            position: absolute;
-            z-index: 10; /* Ensure tooltip is above other elements */
-            bottom: 125%; /* Default: ABOVE */
-            left: 50%;
-            margin-left: -125px; /* Center the tooltip */
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none; 
-            border: 2px solid #2980b9;
+            display: none; /* disabled; using fixed preview box */
         }
-        
-        /* --- Tooltip Class for positioning BELOW --- */
-        .card-tooltip.bottom {
-            top: 125%; /* Position the tooltip BELOW the text */
-            bottom: auto; 
-        }
-
-        .card-tooltip img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 4px;
-        }
-        
-        .cmd-name:hover .card-tooltip {
-            visibility: visible;
-            opacity: 1;
-        }
-        /* -------------------------------------- */
-
 
         .btn-life {
             padding: 8px 12px;
@@ -265,7 +229,7 @@
             position: absolute;
             width: 100%; 
             background-color: #383838;
-            border: 1px solid #2980b9;
+            border: 1px solid #444; /* changed from blue to dark */
             border-top: none;
             max-height: 150px;
             overflow-y: auto;
@@ -274,6 +238,14 @@
             box-shadow: 0 4px 8px rgba(0,0,0,0.5);
             margin-top: -10px; 
         }
+        /* Auto-hide suggestions when empty to prevent stray line */
+        .suggestions-list:empty {
+            display: none !important;
+            border: none !important;
+            box-shadow: none !important;
+            margin-top: 0 !important;
+        }
+
         .suggestion-item {
             padding: 8px 12px;
             cursor: pointer;
@@ -664,19 +636,15 @@
                     lifeDisplayHtml = `<span class="life-total">${player.life}</span>`;
                 }
                 
-                // Commander Name with Hover
+                // Commander Name with Hover (fixed preview box)
                 const commanderName = player.commanderName || player.commander || 'N/A';
                 const commanderImage = player.commanderImageUrl || '';
 
-                const commanderHtml = commanderImage ? `
+                const commanderHtml = `
                     <div class="cmd-name" id="cmd-name-${playerId}">
                         [${commanderName}]
-                        <span class="card-tooltip">
-                            <img src="${commanderImage}" alt="${commanderName}">
-                        </span>
                     </div>
-                ` : `<div class="cmd-name">[${commanderName}]</div>`;
-
+                `;
 
                 let damageRows = '';
                 const opponents = playerIds.filter(id => id !== playerId);
@@ -767,27 +735,7 @@
             // --- RENDER CHAT LOG ---
             renderChat(roomData.chatLog || [], currentPlayerName);
 
-
             // --- ATTACH LISTENERS ---
-            
-            // Tooltip Cutoff Fix (In-Game View: Toggle Top/Bottom)
-            playerIds.forEach(playerId => {
-                const cmdElement = document.getElementById(`cmd-name-${playerId}`);
-                if (cmdElement) {
-                    const rect = cmdElement.getBoundingClientRect();
-                    const tooltip = cmdElement.querySelector('.card-tooltip');
-                    
-                    if (tooltip) {
-                        // Check if the element is in the top 30% of the container (arbitrary safe space)
-                        if (rect.top < 200) { 
-                            tooltip.classList.add('bottom');
-                        } else {
-                            tooltip.classList.remove('bottom');
-                        }
-                    }
-                }
-            });
-
             document.querySelectorAll('.btn-life').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.target.classList.add('tapped');
@@ -869,6 +817,29 @@
             // Make updateCmdDamageDirectly and updateLifeDirectly globally accessible
             window.updateCmdDamageDirectly = updateCmdDamageDirectly; 
             window.updateLifeDirectly = updateLifeDirectly; 
+
+            // --- Commander hover preview (fixed left box) ---
+            const previewCard = document.getElementById('lobby-card-preview');
+            const previewImg = document.getElementById('preview-img');
+
+            playerIds.forEach(playerId => {
+                const cmdElement = document.getElementById(`cmd-name-${playerId}`);
+                if (cmdElement) {
+                    const imgUrl = roomData.players[playerId].commanderImageUrl;
+                    cmdElement.addEventListener('mouseenter', () => {
+                        if (imgUrl && previewCard && previewImg) {
+                            previewImg.src = imgUrl;
+                            previewCard.style.display = 'block';
+                        }
+                    });
+                    cmdElement.addEventListener('mouseleave', () => {
+                        if (previewCard && previewImg) {
+                            previewCard.style.display = 'none';
+                            previewImg.src = '';
+                        }
+                    });
+                }
+            });
         }
         
         // --- CHAT DATA UPDATE FUNCTION ---
