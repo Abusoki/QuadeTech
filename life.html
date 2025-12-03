@@ -37,6 +37,14 @@
             background-color: #383838; /* Dark input background */
             color: #f0f0f0; /* Light input text */
         }
+        
+        /* NEW: Fixes for the blue line issue */
+        input:focus {
+            outline: none; /* Removes default blue focus outline */
+            border-color: #555; /* Keeps a subtle border on focus */
+            box-shadow: none; /* Ensures no glow */
+        }
+
         button {
             cursor: pointer;
             border: none;
@@ -227,6 +235,8 @@
             z-index: 100; 
             border-radius: 0 0 6px 6px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            /* NEW: Adjust margin-top to butt up against the input */
+            margin-top: -10px; 
         }
         .suggestion-item {
             padding: 8px 12px;
@@ -320,6 +330,7 @@
             width: 90%;
             max-width: 400px;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.7);
+            position: relative; /* For modal autocomplete */
         }
         #search-results img {
             max-width: 100%;
@@ -328,7 +339,7 @@
             margin-top: 15px;
         }
 
-        /* --- NEW: Lobby Card Preview (Fixed Left) --- */
+        /* --- Lobby Card Preview (Fixed Left) --- */
         #lobby-card-preview {
             position: fixed;
             top: 50%;
@@ -391,8 +402,8 @@
     <div id="card-search-modal" class="modal">
         <div class="modal-content">
             <h3>Card Search (Scryfall)</h3>
-            <input type="text" id="modal-card-name" placeholder="Enter card name">
-            <div id="modal-suggestions-list" class="suggestions-list"></div> <button id="modal-search-btn" class="btn-primary">Search</button>
+            <input type="text" id="modal-card-name" placeholder="Enter card name" autocomplete="off"> <div id="modal-suggestions-list" class="suggestions-list"></div>
+            <button id="modal-search-btn" class="btn-primary">Search</button>
             <div id="search-results"></div>
             <button id="modal-close-btn" class="btn-danger">Close</button>
         </div>
@@ -414,6 +425,8 @@
         const SCRYFALL_AUTOCOMPLETE_API = "https://api.scryfall.com/cards/autocomplete?q=";
         const TIMEOUT_MINUTES = 25; 
         const DELETE_ALL_PWD = "DeleteAllRooms"; 
+        // NEW: Reduced debounce time
+        const AUTOCOMPLETE_DEBOUNCE_MS = 100;
         
         // ----------------------------------------------------------------------
         // 2. IMPORTS
@@ -516,7 +529,7 @@
                         item.onclick = () => {
                             inputField.value = suggestion;
                             suggestionsList.innerHTML = ''; // Clear suggestions after selection
-                            inputField.focus(); // Keep focus after autofill
+                            // inputField.focus(); // Removed focus to prevent browser issues after autofill
                         };
                         suggestionsList.appendChild(item);
                     });
@@ -1032,8 +1045,9 @@
                 
                 if (query.length >= 2) {
                     autocompleteTimeout = setTimeout(() => {
+                        // NEW: Using AUTOCOMPLETE_DEBOUNCE_MS (100ms)
                         fetchAutocompleteSuggestions(query, 'suggestions-list', 'commander-input');
-                    }, 300); // Debounce to prevent flooding Scryfall API
+                    }, AUTOCOMPLETE_DEBOUNCE_MS); 
                 } else {
                     suggestionsList.innerHTML = '';
                 }
@@ -1253,7 +1267,7 @@
                     });
                 });
                 
-                // NEW: Lobby Commander Hover Preview
+                // FIXED: Lobby Commander Hover Preview
                 listContainer.querySelectorAll('.lobby-cmd-name').forEach(cmdSpan => {
                     const imageUrl = cmdSpan.dataset.imgUrl;
 
@@ -1290,20 +1304,22 @@
         // --- Card Search Modal Logic ---
         const modalCardNameInput = document.getElementById('modal-card-name');
         const modalSuggestionsList = document.getElementById('modal-suggestions-list');
+        let modalAutocompleteTimeout = null;
 
         document.getElementById('modal-close-btn').addEventListener('click', () => {
             document.getElementById('card-search-modal').style.display = 'none';
         });
         
-        // NEW: Modal Autocomplete Listener
+        // Modal Autocomplete Listener
         modalCardNameInput.addEventListener('input', () => {
             const query = modalCardNameInput.value.trim();
-            if (autocompleteTimeout) clearTimeout(autocompleteTimeout);
+            if (modalAutocompleteTimeout) clearTimeout(modalAutocompleteTimeout);
             
             if (query.length >= 2) {
-                autocompleteTimeout = setTimeout(() => {
+                modalAutocompleteTimeout = setTimeout(() => {
+                    // NEW: Using AUTOCOMPLETE_DEBOUNCE_MS (100ms)
                     fetchAutocompleteSuggestions(query, 'modal-suggestions-list', 'modal-card-name');
-                }, 300); 
+                }, AUTOCOMPLETE_DEBOUNCE_MS); 
             } else {
                 modalSuggestionsList.innerHTML = '';
             }
