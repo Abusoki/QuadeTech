@@ -218,6 +218,12 @@
       return result;
     }
 
+    // compute outgoing total for a source player (sum of their commanderDamage map)
+    function computeOutgoingTotal(roomData, sourcePlayerId){
+      const dmgMap = (roomData.players?.[sourcePlayerId]?.commanderDamage) || {};
+      return Object.keys(dmgMap).reduce((s,k)=> s + (parseInt(dmgMap[k])||0), 0);
+    }
+
     // compute incoming total for a target player
     function computeIncomingCmdDamage(roomData, targetPlayerId){
       let total = 0;
@@ -242,8 +248,8 @@
     async function renderHome(){ await renderSetupView(); }
 
     const CHANGELOG = [
-      { version: "0.9.6", date: "2025-12-06", notes: "Stable player order and edit restrictions; UI polish." },
-      { version: "0.9.5", date: "2025-12-05", notes: "UI tweaks: static CMD rows, compact infect controls, preview button adjustments." }
+      { version: "0.9.7", date: "2025-12-07", notes: "Show  to/from on each panel; incoming editor updates opponent's outgoing." },
+      { version: "0.9.6", date: "2025-12-06", notes: "Stable player order and edit restrictions; UI polish." }
     ];
 
     function renderChanges(){
@@ -452,10 +458,8 @@
         const opponents = playerIds.filter(id => id !== playerId);
         if(opponents.length > 0){
           opponents.forEach(oppId => {
-            // value is opponent's outgoing to this player
             const dmg = (roomData.players[oppId]?.commanderDamage || {})[playerId] || 0;
             const oppName = roomData.players[oppId]?.name || 'Player';
-            // only allow editing these incoming values if the target player is you (playerId === userId)
             const editable = (playerId === userId);
             const disabledAttr = editable ? '' : 'disabled';
             perOppRows += `
@@ -480,31 +484,50 @@
           </div>
         `;
 
-        // CMD block: if this is your panel, show outgoing breakdown (what your commander has done to others).
-        // For others, show incoming total.
-        let cmdBlockInner = '';
+        // CMD block: show both "to" (outgoing total) and "from" (incoming total).
+        // For your panel, hide the "from" summary (you already see incoming on opponents) and show outgoing breakdown.
+        const outgoingTotal = computeOutgoingTotal(roomData, playerId);
+        const incomingTotal = computeIncomingCmdDamage(roomData, playerId);
+        let outgoingBreakdownHtml = '';
         if(isMe){
           const outgoing = computeOutgoingCmdDamage(roomData, playerId);
           let outgoingHtml = '<div class="outgoing-cmd-list">';
           if(outgoing.length === 0) outgoingHtml += `<div class="outgoing-cmd-item" style="justify-content:center;color:var(--muted)">No opponents yet</div>`;
           else {
             outgoing.forEach(item=>{
-              outgoingHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">CMD DMG ${item.oppName}</div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
+              outgoingHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">${item.oppName}: </div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
             });
           }
           outgoingHtml += '</div>';
+          outgoingBreakdownHtml = outgoingHtml;
+        }
+
+        // Build cmdBlockInner with conditional "from" visibility for YOU
+        let cmdBlockInner = '';
+        if (isMe) {
+          // YOU: show only "to" and outgoing breakdown
           cmdBlockInner = `
             <div style="display:flex;flex-direction:column;gap:6px">
-              <div class="cmd-label" style="font-weight:700;color:var(--muted)">CMD DMG (your commander → others)</div>
-              ${outgoingHtml}
+              <div style="display:flex;gap:12px;align-items:center">
+                <div>
+                  <div class="cmd-label">Outgoing CMD DMG</div>
+                </div>
+              </div>
+              ${outgoingBreakdownHtml}
             </div>
           `;
         } else {
-          const incomingTotal = computeIncomingCmdDamage(roomData, playerId);
+          // Others: show both to and from
           cmdBlockInner = `
-            <div>
-              <div class="cmd-label">CMD DMG</div>
-              <div class="cmd-value" id="cmd-total-${playerId}">${incomingTotal}</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;gap:12px;align-items:center">
+                <div>
+                  <div class="cmd-label">CMD DMG from</div>
+                  <div class="cmd-value" id="cmd-to-${playerId}">${outgoingTotal}</div>
+                </div>
+                <div>
+                </div>
+              </div>
             </div>
           `;
         }
@@ -626,7 +649,6 @@
           }
           else if(action === 'cmd-target-add'){
             const t = btn.dataset.target; const opp = btn.dataset.opp;
-            // Update opponent's outgoing to target (opp -> t) by +1
             await updateCmdDamageForTarget(opp, t, +1);
           }
           else if(action === 'cmd-target-sub'){
@@ -747,7 +769,7 @@
       }catch(e){ console.error("Error updating infect:", e); }
     }
 
-    // IMPORTANT: updateCmdDamageForTarget now updates opponent's outgoing to target (oppId -> targetPlayerId)
+    // IMPORTANT: updateCmdDamageForTarget updates opponent's outgoing to target (oppId -> targetPlayerId)
     async function updateCmdDamageForTarget(oppId, targetPlayerId, delta){
       if(!roomId || !userId) return;
       // only allow editing incoming values for yourself (targetPlayerId must be you)
@@ -764,7 +786,6 @@
         const newVal = Math.max(0, cur + delta);
         dmgMap[targetPlayerId] = newVal;
         opponent.commanderDamage = dmgMap;
-        // write back opponent's updated map
         await setDoc(ref, { players: { [oppId]: opponent }, lastActive: serverTimestamp() }, { merge: true });
       }catch(e){ console.error("Error updating commander damage for target (opp -> target):", e); }
     }
