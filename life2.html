@@ -39,18 +39,18 @@
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp, query, orderBy, limit, increment } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
         const { useState, useEffect, useRef, useMemo } = React;
 
         // --- Configuration & Global Variables ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-      apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
-      authDomain: "mtg-life-tool.firebaseapp.com",
-      projectId: "mtg-life-tool",
-      storageBucket: "mtg-life-tool.appspot.com",
-      messagingSenderId: "36730058988",
-      appId: "1:36730058988:web:757e2d9620593b4f65022a"
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "SENDER_ID",
+            appId: "APP_ID"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -146,6 +146,27 @@
                     const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
+            }
+        };
+
+        // --- Helpers ---
+        // Helper to update persistent historical stats
+        const updateCommanderStat = async (commander) => {
+            if (!commander || !commander.name) return;
+            // Reference to the persistent historical stats collection
+            const statRef = doc(db, 'artifacts', appId, 'public', 'data', 'commander_stats', commander.name);
+            try {
+                // Using increment(1) for atomic updates
+                await setDoc(statRef, {
+                    name: commander.name,
+                    image: commander.image, // Overwrite with latest image url if needed
+                    fullImage: commander.fullImage,
+                    artist: commander.artist || 'Unknown',
+                    count: increment(1),
+                    lastPlayed: serverTimestamp()
+                }, { merge: true });
+            } catch (e) {
+                console.error("Error updating stats:", e);
             }
         };
 
@@ -325,41 +346,29 @@
             );
         };
 
-        // 3. Stats Page
+        // 3. Stats Page (Now pulls from persistent 'commander_stats')
         const StatsPage = ({ user }) => {
-            const [stats, setStats] = useState({ topCommanders: [], totalGames: 0, topCommander: null });
+            const [stats, setStats] = useState({ topCommanders: [], topCommander: null });
             const [loading, setLoading] = useState(true);
 
             useEffect(() => {
                 if (!user) return;
-                const roomsRef = collection(db, 'artifacts', appId, 'public', 'data', 'rooms');
-                const unsubscribe = onSnapshot(roomsRef, (snapshot) => {
-                    const commanderCounts = {};
-                    let gameCount = 0;
-                    snapshot.docs.forEach(doc => {
-                        const room = doc.data();
-                        if (room.name === "Test" || !room.players) return;
-                        gameCount++;
-                        room.players.forEach(player => {
-                            if (player.commander && player.commander.name) {
-                                const name = player.commander.name;
-                                if (!commanderCounts[name]) {
-                                    commanderCounts[name] = {
-                                        name: name,
-                                        count: 0,
-                                        image: player.commander.fullImage || player.commander.image
-                                    };
-                                }
-                                commanderCounts[name].count += 1;
-                            }
-                        });
+                // Query the PERSISTENT historical stats collection
+                const statsRef = collection(db, 'artifacts', appId, 'public', 'data', 'commander_stats');
+                
+                const unsubscribe = onSnapshot(statsRef, (snapshot) => {
+                    const commanders = [];
+                    snapshot.forEach(doc => {
+                        commanders.push(doc.data());
                     });
-                    const sortedCommanders = Object.values(commanderCounts)
-                        .sort((a, b) => b.count - a.count)
+
+                    // Sort by count descending
+                    const sortedCommanders = commanders
+                        .sort((a, b) => (b.count || 0) - (a.count || 0))
                         .slice(0, 5);
+
                     setStats({
                         topCommanders: sortedCommanders,
-                        totalGames: gameCount,
                         topCommander: sortedCommanders.length > 0 ? sortedCommanders[0] : null
                     });
                     setLoading(false);
@@ -382,11 +391,11 @@
                         <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700/50 backdrop-blur-sm">
                             <h2 className="text-xl font-semibold text-purple-300 mb-6 flex items-center justify-between">
                                 <span>Top 5 Commanders</span>
-                                <span className="text-xs font-normal text-slate-500 bg-slate-800 px-2 py-1 rounded-full">Global Pool</span>
+                                <span className="text-xs font-normal text-slate-500 bg-slate-800 px-2 py-1 rounded-full">All Time</span>
                             </h2>
                             <div className="space-y-4">
                                 {stats.topCommanders.length === 0 ? (
-                                    <div className="text-slate-500 text-center py-10">No commander data available yet.</div>
+                                    <div className="text-slate-500 text-center py-10">No stats recorded yet. Play a game!</div>
                                 ) : (
                                     stats.topCommanders.map((cmd, index) => (
                                         <div key={cmd.name} className="flex items-center gap-4 p-3 bg-slate-800/50 rounded-xl hover:bg-slate-800 transition-all border border-transparent hover:border-purple-500/30 group">
@@ -396,7 +405,7 @@
                                             </div>
                                             <div className="flex-1">
                                                 <div className="text-white font-medium truncate">{cmd.name}</div>
-                                                <div className="text-xs text-slate-400">{cmd.count} selections</div>
+                                                <div className="text-xs text-slate-400">{cmd.count} plays</div>
                                             </div>
                                             {index === 0 && <Icons.Crown className="w-5 h-5 text-yellow-500" />}
                                         </div>
@@ -636,7 +645,7 @@
             </div>
         );
 
-        // 6. Online Room (Updated with Timeout)
+        // 6. Online Room (Updated with Timeout & Stat Recording)
         const OnlineRoom = ({ user, onLeave }) => {
             const [joinedRoom, setJoinedRoom] = useState(null);
             const [error, setError] = useState('');
@@ -718,6 +727,12 @@
                         players: [playerData], 
                         log: [] 
                     });
+                    
+                    // Count host's commander if they somehow start with one (unlikely but safe)
+                    if (playerData.commander && hostName !== "Test") {
+                        updateCommanderStat(playerData.commander);
+                    }
+
                     setJoinedRoom(hostName);
                 } catch (err) { setError(err.message); }
             };
@@ -822,6 +837,11 @@
                     players: newPlayers,
                     lastActivity: serverTimestamp() // Update activity on any change
                 });
+
+                // Record stat if commander changed and room is not Test
+                if (updates.commander && joinedRoom !== "Test") {
+                    updateCommanderStat(updates.commander);
+                }
             };
 
             // Game View
@@ -1020,11 +1040,11 @@
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.6.0 - Housekeeping Update</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Room Timeouts</h3>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.7.0 - Persistent Data</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Historical Statistics</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Automatic Cleanup:</strong> Rooms that have been inactive for 20 minutes or open for more than 12 hours will now automatically close.</li>
-                        <li><strong className="text-slate-200">Lobby Filtering:</strong> Stale or timed-out rooms are now automatically filtered out of the active rooms list in the lobby.</li>
+                        <li><strong className="text-slate-200">Permanent Tracking:</strong> Commander stats are now saved permanently. When a room times out, the usage data is preserved.</li>
+                        <li><strong className="text-slate-200">Historical Leaderboard:</strong> The Stats page now shows the most popular commanders of all time, rather than just currently active ones.</li>
                     </ul>
                 </div>
                 {/* ... existing changelogs ... */}
