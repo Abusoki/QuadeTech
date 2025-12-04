@@ -175,6 +175,51 @@
             }
         };
 
+        // --- Web Worker Heartbeat Hook ---
+        // This creates an invisible worker thread that "pokes" the main app
+        // every 1000ms to prevent the browser from putting the tab to sleep.
+        const useBackgroundHeartbeat = () => {
+            useEffect(() => {
+                // 1. Define the worker script as a string
+                const workerScript = `
+                    let intervalId;
+                    self.onmessage = function(e) {
+                        if (e.data === 'start') {
+                            // Tick every 1000ms (1 second)
+                            intervalId = setInterval(() => {
+                                self.postMessage('tick');
+                            }, 1000);
+                        } else if (e.data === 'stop') {
+                            clearInterval(intervalId);
+                        }
+                    };
+                `;
+
+                // 2. Create a Blob URL for the worker
+                const blob = new Blob([workerScript], { type: 'application/javascript' });
+                const workerUrl = URL.createObjectURL(blob);
+                
+                // 3. Initialize the worker
+                const worker = new Worker(workerUrl);
+
+                // 4. Listen for the 'tick'
+                worker.onmessage = () => {
+                    // Merely receiving this message wakes up the Main Thread's event loop.
+                    // This allows pending Firebase WebSocket events to process immediately.
+                };
+
+                // 5. Start the worker
+                worker.postMessage('start');
+
+                // Cleanup
+                return () => {
+                    worker.postMessage('stop');
+                    worker.terminate();
+                    URL.revokeObjectURL(workerUrl);
+                };
+            }, []);
+        };
+
         // --- Components ---
 
         // 1. Game Tools Modal
@@ -966,7 +1011,7 @@
                                 <div className="flex gap-2">
                                      <button onClick={copyRoomLink} className="hidden md:flex items-center gap-1 text-xs bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-purple-500/50"><Icons.Share className="w-3 h-3" /> Share</button>
                                      {isHost && (
-                                         <>
+                                       <>
                                             <button 
                                                 onClick={() => { if(confirmClose) { closeRoom(); } else { setConfirmClose(true); setTimeout(() => setConfirmClose(false), 3000); } }} 
                                                 className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all font-medium border ${confirmClose ? 'bg-red-600 text-white border-red-600 scale-105' : 'bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white border-red-500/50'}`}
@@ -979,7 +1024,7 @@
                                             >
                                                 <Icons.Refresh className="w-3 h-3" /> <span className="hidden md:inline">{confirmReset ? 'Confirm?' : 'Reset'}</span>
                                             </button>
-                                         </>
+                                       </>
                                      )}
                                      <button onClick={() => { setJoinedRoom(null); onLeave(); }} className="flex items-center gap-1 text-xs bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-slate-600/50">
                                         <Icons.LogOut className="w-3 h-3" /> <span className="hidden md:inline">Leave</span>
@@ -1140,6 +1185,9 @@
 
         // --- Main App ---
         function App() {
+            // !!! ADDED FOR BACKGROUND UPDATES !!!
+            useBackgroundHeartbeat();
+
             const [user, setUser] = useState(null);
             const [view, setView] = useState('local');
             const [isLocalSetup, setIsLocalSetup] = useState(true);
