@@ -892,9 +892,9 @@
           cardSpan.dataset.cardImageUrl = msg.cardImageUrl;
           cardSpan.dataset.cardName = msg.message;
           messageDiv.appendChild(cardSpan);
-          cardSpan.addEventListener('mouseenter', (e)=>{ showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
-          cardSpan.addEventListener('mouseleave', (e)=>{ hideChatCardPreviewWithDelay(); });
-          cardSpan.addEventListener('click', (e)=>{ const preview = document.getElementById('chat-card-preview'); if(preview.style.display === 'block') hideChatCardPreviewImmediate(); else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          cardSpan.addEventListener('mouseenter', ()=>{ showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          cardSpan.addEventListener('mouseleave', ()=>{ hideChatCardPreviewWithDelay(); });
+          cardSpan.addEventListener('click', ()=>{ const preview = document.getElementById('chat-card-preview'); if(preview.style.display === 'block') hideChatCardPreviewImmediate(); else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
         } else {
           messageDiv.appendChild(document.createTextNode(' ' + msg.message));
         }
@@ -1124,11 +1124,11 @@
         </div>
       `;
 
-      const appContainer = document.getElementById("app-container");
+      // Use the existing appContainer declared at the top of the function (no redeclaration)
       appContainer.innerHTML = html;
 
       // render chat
-      renderChat(roomData.chatLog || [], roomData.players[userId]?.name || 'You');
+      renderChat(roomData.chatLog || [], currentPlayerName);
 
       // reapply openCmdControls state after render
       const playerIdsAfter = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
@@ -1217,7 +1217,7 @@
           e.preventDefault();
           const input = document.getElementById('chat-message-input');
           const message = input.value.trim();
-          if(message){ sendChatMessage(message, roomData.players[userId]?.name || 'You'); input.value = ''; }
+          if(message){ sendChatMessage(message, currentPlayerName); input.value = ''; }
         });
       }
 
