@@ -483,6 +483,10 @@
 
             const createRoom = async () => {
                 if (!roomName) return;
+                if (!user) {
+                    setError("Authenticating... Please wait.");
+                    return;
+                }
                 try {
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomName);
                     const playerData = { id: user.uid, name: 'Host', life: 40, commander: null, isDead: false, lastActive: Date.now() };
@@ -493,6 +497,10 @@
 
             const joinRoom = async () => {
                 if (!roomName) return;
+                if (!user) {
+                    setError("Authenticating... Please wait.");
+                    return;
+                }
                 setJoinedRoom(roomName);
             };
 
@@ -556,9 +564,10 @@
                         <div className="space-y-4">
                             <input type="text" placeholder="Enter Room Name" className="w-full bg-slate-900 border border-slate-700 text-white p-3 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" value={roomName} onChange={(e) => setRoomName(e.target.value)} />
                             <div className="grid grid-cols-2 gap-4">
-                                <button onClick={createRoom} disabled={!roomName} className="bg-purple-600 hover:bg-purple-500 text-white p-3 rounded-lg font-bold transition-colors disabled:opacity-50">Host</button>
-                                <button onClick={joinRoom} disabled={!roomName} className="bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg font-bold transition-colors disabled:opacity-50">Join</button>
+                                <button onClick={createRoom} disabled={!roomName || !user} className="bg-purple-600 hover:bg-purple-500 text-white p-3 rounded-lg font-bold transition-colors disabled:opacity-50">Host</button>
+                                <button onClick={joinRoom} disabled={!roomName || !user} className="bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg font-bold transition-colors disabled:opacity-50">Join</button>
                             </div>
+                            {!user && <div className="text-yellow-400 text-xs mt-2 animate-pulse">Connecting to services...</div>}
                             {error && <div className="text-red-400 text-sm mt-2">{error}</div>}
                         </div>
                     </div>
