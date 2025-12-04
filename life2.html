@@ -62,12 +62,12 @@
 
         // --- Configuration & Global Variables ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-      apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
-      authDomain: "mtg-life-tool.firebaseapp.com",
-      projectId: "mtg-life-tool",
-      storageBucket: "mtg-life-tool.appspot.com",
-      messagingSenderId: "36730058988",
-      appId: "1:36730058988:web:757e2d9620593b4f65022a"
+          apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
+          authDomain: "mtg-life-tool.firebaseapp.com",
+          projectId: "mtg-life-tool",
+          storageBucket: "mtg-life-tool.appspot.com",
+          messagingSenderId: "36730058988",
+          appId: "1:36730058988:web:757e2d9620593b4f65022a"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -633,7 +633,7 @@
                                             const tooltipText = sourcePlayer?.commander?.name 
                                                 ? `${sourcePlayer.commander.name} (${sourcePlayer.name})` 
                                                 : `${sourcePlayer?.name || 'Unknown Player'}`;
-                                                
+                                            
                                             return (
                                                 <div 
                                                     key={sourceId} 
@@ -928,17 +928,19 @@
                                 <div className="flex items-center gap-2"><Icons.Wifi className="text-green-500 w-4 h-4 animate-pulse" /><span className="text-white font-bold">{joinedRoom}</span><span className="text-slate-500 text-sm">({players.length})</span></div>
                                 <div className="flex gap-2">
                                      <button onClick={copyRoomLink} className="hidden md:flex items-center gap-1 text-xs bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-purple-500/50"><Icons.Share className="w-3 h-3" /> Share</button>
+                                     {isHost && (
+                                         <>
+                                            <button onClick={closeRoom} className="flex items-center gap-1 text-xs bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-red-500/50">
+                                                <Icons.Trash className="w-3 h-3" /> <span className="hidden md:inline">Close</span>
+                                            </button>
+                                            <button onClick={resetGame} className="flex items-center gap-1 text-xs bg-slate-700 text-slate-300 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-slate-600">
+                                                <Icons.Refresh className="w-3 h-3" /> <span className="hidden md:inline">Reset</span>
+                                            </button>
+                                         </>
+                                     )}
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
-                                {isHost && (
-                                    <>
-                                        <button onClick={resetGame} className="text-purple-400 hover:text-white p-2 rounded-full hover:bg-purple-600/30 transition-colors" title="Reset Game"><Icons.Refresh className="w-5 h-5" /></button>
-                                        <button onClick={closeRoom} className="text-red-500 hover:text-red-400 p-2 rounded-full hover:bg-red-900/30 transition-colors" title="Close & Delete Room">
-                                            <Icons.Trash className="w-5 h-5" />
-                                        </button>
-                                    </>
-                                )}
                                 <button onClick={() => { setJoinedRoom(null); onLeave(); }} className="text-slate-400 hover:text-white text-sm font-medium">Leave</button>
                             </div>
                         </div>
