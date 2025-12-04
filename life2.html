@@ -636,7 +636,7 @@
             </div>
         );
 
-        // 6. Online Room (Updated)
+        // 6. Online Room (Updated with Timeout)
         const OnlineRoom = ({ user, onLeave }) => {
             const [joinedRoom, setJoinedRoom] = useState(null);
             const [error, setError] = useState('');
@@ -651,11 +651,18 @@
             const [joinPassword, setJoinPassword] = useState('');
             const [selectedRoomId, setSelectedRoomId] = useState(null);
             
+            const TIMEOUT_INACTIVITY = 20 * 60 * 1000; // 20 minutes
+            const TIMEOUT_DURATION = 12 * 60 * 60 * 1000; // 12 hours
+
+            const getMillis = (ts) => {
+                if (!ts) return Date.now();
+                return ts.toMillis ? ts.toMillis() : Date.now();
+            };
+
             // Fetch Rooms for Lobby & Check Query Params
             useEffect(() => {
                 if(joinedRoom) return; 
                 
-                // Check query param for room
                 const params = new URLSearchParams(window.location.search);
                 const roomParam = params.get('room');
                 if (roomParam) {
@@ -665,7 +672,17 @@
                 const roomsRef = collection(db, 'artifacts', appId, 'public', 'data', 'rooms');
                 const unsub = onSnapshot(roomsRef, (snap) => {
                     const r = [];
-                    snap.forEach(d => r.push({id: d.id, ...d.data()}));
+                    const now = Date.now();
+                    snap.forEach(d => {
+                        const data = d.data();
+                        const created = getMillis(data.createdAt);
+                        const lastActive = getMillis(data.lastActivity);
+                        
+                        // Filter out timed out rooms from lobby view
+                        if (now - lastActive < TIMEOUT_INACTIVITY && now - created < TIMEOUT_DURATION) {
+                            r.push({id: d.id, ...data});
+                        }
+                    });
                     setRooms(r);
                 });
                 return () => unsub();
@@ -696,7 +713,8 @@
                     await setDoc(roomRef, { 
                         name: hostName, 
                         password: hostPassword, 
-                        createdAt: serverTimestamp(), 
+                        createdAt: serverTimestamp(),
+                        lastActivity: serverTimestamp(),
                         players: [playerData], 
                         log: [] 
                     });
@@ -745,6 +763,23 @@
                 const unsubscribe = onSnapshot(roomRef, (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
+                        
+                        // Check Timeouts inside room
+                        const now = Date.now();
+                        const created = getMillis(data.createdAt);
+                        const lastActive = getMillis(data.lastActivity);
+
+                        if (now - lastActive > TIMEOUT_INACTIVITY) {
+                            setJoinedRoom(null);
+                            setError("Room closed due to inactivity (20m).");
+                            return;
+                        }
+                        if (now - created > TIMEOUT_DURATION) {
+                            setJoinedRoom(null);
+                            setError("Room closed (12h limit reached).");
+                            return;
+                        }
+
                         let currentPlayers = data.players || [];
                         const amIIn = currentPlayers.find(p => p.id === user.uid);
                         
@@ -764,7 +799,10 @@
                                 poison: 0,
                                 commanderDamage: {}
                             };
-                            updateDoc(roomRef, { players: [...currentPlayers, newPlayer] });
+                            updateDoc(roomRef, { 
+                                players: [...currentPlayers, newPlayer],
+                                lastActivity: serverTimestamp()
+                            });
                         } else {
                             setPlayers(currentPlayers);
                         }
@@ -780,7 +818,10 @@
                 if (!joinedRoom) return;
                 const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
                 const newPlayers = players.map(p => p.id === user.uid ? { ...p, ...updates } : p);
-                await updateDoc(roomRef, { players: newPlayers });
+                await updateDoc(roomRef, { 
+                    players: newPlayers,
+                    lastActivity: serverTimestamp() // Update activity on any change
+                });
             };
 
             // Game View
@@ -979,13 +1020,11 @@
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.5.0 - Lobby Upgrade</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Passwords & Profiles</h3>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.6.0 - Housekeeping Update</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Room Timeouts</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Active Room Browser:</strong> You can now see a list of live rooms in the online lobby.</li>
-                        <li><strong className="text-slate-200">Room Passwords:</strong> Hosts can now set a password for their rooms to keep games private.</li>
-                        <li><strong className="text-slate-200">Display Names:</strong> You can now set a custom player name when joining or hosting. This name appears above your Commander.</li>
-                        <li><strong className="text-slate-200">Share Rooms:</strong> While in a game, click "Share Room" to copy a direct join link to your clipboard.</li>
+                        <li><strong className="text-slate-200">Automatic Cleanup:</strong> Rooms that have been inactive for 20 minutes or open for more than 12 hours will now automatically close.</li>
+                        <li><strong className="text-slate-200">Lobby Filtering:</strong> Stale or timed-out rooms are now automatically filtered out of the active rooms list in the lobby.</li>
                     </ul>
                 </div>
                 {/* ... existing changelogs ... */}
