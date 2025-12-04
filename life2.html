@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>MTG Companion</title>
     
     <!-- Tailwind CSS -->
@@ -50,13 +50,13 @@
         }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-200 h-screen overflow-hidden">
+<body class="bg-slate-950 text-slate-200 h-[100dvh] overflow-hidden">
     <div id="root" class="h-full w-full"></div>
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp, query, orderBy, limit, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp, query, orderBy, limit, increment, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
         const { useState, useEffect, useRef, useMemo } = React;
 
@@ -547,6 +547,7 @@
             const [showCmdrSearch, setShowCmdrSearch] = useState(false);
             const [showTools, setShowTools] = useState(false);
             const [rotation, setRotation] = useState(0);
+            const [activeTooltip, setActiveTooltip] = useState(null);
 
             const pushToLog = (msg) => { if (onLog) onLog(msg); };
             const lifeChangeRef = useRef(0);
@@ -603,8 +604,8 @@
             const rotateClass = `rotate-${rotation}`;
             const isSideways = rotation === 90 || rotation === 270;
             const cardClasses = isWinner 
-                ? `relative flex flex-col h-full rounded-2xl overflow-hidden transition-all duration-300 bg-slate-900 border-2 border-yellow-400 winner-glow`
-                : `relative flex flex-col h-full rounded-2xl overflow-hidden transition-all duration-300 ${isDead ? 'opacity-50 grayscale' : ''} ${color}`;
+                ? `relative flex flex-col h-full rounded-2xl overflow-hidden transition-all duration-300 bg-slate-900 border-2 border-yellow-400 winner-glow min-h-[300px]`
+                : `relative flex flex-col h-full rounded-2xl overflow-hidden transition-all duration-300 ${isDead ? 'opacity-50 grayscale' : ''} ${color} min-h-[300px]`;
 
             return (
                 <div className={cardClasses}>
@@ -624,7 +625,38 @@
                                 <div className="flex flex-col items-center">
                                     <div className="text-7xl font-black text-white tabular-nums tracking-tighter drop-shadow-2xl relative">{life}{isWinner && <Icons.Crown className="w-8 h-8 text-yellow-400 absolute -top-8 -right-4 rotate-12 drop-shadow-lg" />}</div>
                                     <div className="flex gap-2">{(poison > 0) && (<div className="flex items-center gap-1 text-green-400 font-bold mt-1 bg-black/50 px-2 py-0.5 rounded-full text-xs"><Icons.Droplet className="w-3 h-3" /> {poison}/10</div>)}{milled && (<div className="flex items-center gap-1 text-blue-400 font-bold mt-1 bg-black/50 px-2 py-0.5 rounded-full text-xs border border-blue-500/50"><Icons.Book className="w-3 h-3" /> Milled</div>)}</div>
-                                    <div className="flex flex-wrap justify-center gap-1 mt-1 max-w-[120px]">{Object.entries(commanderDamage).map(([sourceId, dmg]) => { if (dmg <= 0) return null; const sourcePlayer = players.find(p => p.id == sourceId); const tooltipText = sourcePlayer?.commander?.name ? `Commander Damage from ${sourcePlayer.commander.name} (${sourcePlayer.name})` : `Commander Damage from ${sourcePlayer?.name || 'Unknown'}`; return (<div key={sourceId} title={tooltipText} className="flex items-center gap-1 text-red-400 font-bold bg-black/50 px-2 py-0.5 rounded-full text-xs cursor-help border border-red-500/20"><Icons.Sword className="w-3 h-3" /> {dmg}/21</div>);})}</div>
+                                    
+                                    <div className="flex flex-wrap justify-center gap-1 mt-1 max-w-[120px] relative"> 
+                                        {Object.entries(commanderDamage).map(([sourceId, dmg]) => {
+                                            if (dmg <= 0) return null;
+                                            const sourcePlayer = players.find(p => p.id == sourceId);
+                                            const tooltipText = sourcePlayer?.commander?.name 
+                                                ? `${sourcePlayer.commander.name} (${sourcePlayer.name})` 
+                                                : `${sourcePlayer?.name || 'Unknown Player'}`;
+                                                
+                                            return (
+                                                <div 
+                                                    key={sourceId} 
+                                                    className="relative"
+                                                    onMouseEnter={() => setActiveTooltip(sourceId)}
+                                                    onMouseLeave={() => setActiveTooltip(null)}
+                                                    onClick={(e) => { e.stopPropagation(); setActiveTooltip(activeTooltip === sourceId ? null : sourceId); }}
+                                                >
+                                                    <div className="flex items-center gap-1 text-red-400 font-bold bg-black/50 px-2 py-0.5 rounded-full text-xs cursor-pointer border border-red-500/20">
+                                                        <Icons.Sword className="w-3 h-3" /> {dmg}/21
+                                                    </div>
+                                                    {/* Custom Tooltip Popover */}
+                                                    {activeTooltip === sourceId && (
+                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-32 bg-black text-white text-xs p-2 rounded-lg shadow-xl border border-red-500/50 z-50 text-center pointer-events-none animate-in fade-in zoom-in-95">
+                                                            <div className="font-bold text-red-300 mb-1">Damage Source</div>
+                                                            <div>{tooltipText}</div>
+                                                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-black border-b border-r border-red-500/50 transform rotate-45"></div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                                 <button onClick={() => adjustLife(1)} className="w-12 h-12 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-sm active:scale-95 transition-all"><span className="text-3xl font-light mb-1">+</span></button>
                             </div>
@@ -896,16 +928,16 @@
                                 <div className="flex items-center gap-2"><Icons.Wifi className="text-green-500 w-4 h-4 animate-pulse" /><span className="text-white font-bold">{joinedRoom}</span><span className="text-slate-500 text-sm">({players.length})</span></div>
                                 <div className="flex gap-2">
                                      <button onClick={copyRoomLink} className="hidden md:flex items-center gap-1 text-xs bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-purple-500/50"><Icons.Share className="w-3 h-3" /> Share</button>
-                                     {isHost && (
-                                        <button onClick={closeRoom} className="flex items-center gap-1 text-xs bg-red-900/30 text-red-400 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-red-500/30" title="Close & Delete Room">
-                                            <Icons.Trash className="w-3 h-3" /> Close
-                                        </button>
-                                     )}
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
                                 {isHost && (
-                                    <button onClick={resetGame} className="text-purple-400 hover:text-white p-2 rounded-full hover:bg-purple-600/30 transition-colors" title="Reset Game"><Icons.Refresh className="w-5 h-5" /></button>
+                                    <>
+                                        <button onClick={resetGame} className="text-purple-400 hover:text-white p-2 rounded-full hover:bg-purple-600/30 transition-colors" title="Reset Game"><Icons.Refresh className="w-5 h-5" /></button>
+                                        <button onClick={closeRoom} className="text-red-500 hover:text-red-400 p-2 rounded-full hover:bg-red-900/30 transition-colors" title="Close & Delete Room">
+                                            <Icons.Trash className="w-5 h-5" />
+                                        </button>
+                                    </>
                                 )}
                                 <button onClick={() => { setJoinedRoom(null); onLeave(); }} className="text-slate-400 hover:text-white text-sm font-medium">Leave</button>
                             </div>
@@ -1019,21 +1051,20 @@
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.20.0 - Global Tracking</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Death Stats & UI Polish</h3>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.21.0 - UI Clean Up</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Online & Wrench</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Global Stats:</strong> Tracked death statistics (Poison, Commander, Mill, Standard) now appear on the Stats page.</li>
-                        <li><strong className="text-slate-200">Online UI:</strong> "Close Room" button moved next to Share. "Reset Game" button restored.</li>
-                        <li><strong className="text-slate-200">Collapsible Sidebar:</strong> Sidebar can now be collapsed to icons-only mode.</li>
+                        <li><strong className="text-slate-200">Online Toolbar:</strong> Restored all host functions (Reset Game, Close Room) to the top bar.</li>
+                        <li><strong className="text-slate-200">Local Wrench:</strong> Fixed the positioning of the tools button in local play. It is now correctly centered over the player grid.</li>
                     </ul>
                 </div>
                  <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-700 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-slate-500 font-mono text-sm">v2.19.0</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Host & Mill</h3>
+                    <div className="mb-1 text-slate-500 font-mono text-sm">v2.20.0</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Global Tracking</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Host Controls:</strong> The "Close Room" button has been moved next to "Share" in online games for easier access.</li>
-                        <li><strong className="text-slate-200">Mill Death:</strong> Added a "Milled Out" toggle in the counters menu to handle library-out losses.</li>
+                        <li><strong className="text-slate-200">Global Stats:</strong> Tracked death statistics (Poison, Commander, Mill, Standard) now appear on the Stats page.</li>
+                        <li><strong className="text-slate-200">Mill Death:</strong> Added a "Milled Out" toggle in the counters menu.</li>
                     </ul>
                 </div>
             </div>
@@ -1194,8 +1225,8 @@
                                     {isLocalSetup ? (
                                         <LocalSetup onStart={startLocalGame} />
                                     ) : (
-                                        <div className="relative h-full">
-                                            <div className={`absolute inset-0 grid gap-1 p-1 md:p-4 ${
+                                        <div className="relative h-full w-full">
+                                            <div className={`absolute inset-0 grid gap-1 p-1 md:p-4 overflow-y-auto min-h-full ${
                                                 localPlayers.length <= 2 ? 'grid-cols-1 sm:grid-cols-2' : 
                                                 localPlayers.length <= 4 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2' : 
                                                 'grid-cols-2 lg:grid-cols-3'
@@ -1215,43 +1246,45 @@
                                             </div>
                                             
                                             {/* Center Tool Button (Floating) */}
-                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 flex flex-col items-center justify-center">
-                                                <button 
-                                                    onClick={() => setShowLocalMenu(!showLocalMenu)}
-                                                    className={`p-4 rounded-full shadow-2xl transition-all duration-300 border-4 border-slate-900 ${showLocalMenu ? 'bg-purple-600 rotate-90 scale-110' : 'bg-slate-800 hover:bg-slate-700'}`}
-                                                >
-                                                    <Icons.Wrench className="w-6 h-6 text-white" />
-                                                </button>
+                                            <div className="absolute inset-0 pointer-events-none z-40 flex items-center justify-center">
+                                                <div className="pointer-events-auto relative flex flex-col items-center">
+                                                    <button 
+                                                        onClick={() => setShowLocalMenu(!showLocalMenu)}
+                                                        className={`p-4 rounded-full shadow-2xl transition-all duration-300 border-4 border-slate-900 ${showLocalMenu ? 'bg-purple-600 rotate-90 scale-110' : 'bg-slate-800 hover:bg-slate-700'}`}
+                                                    >
+                                                        <Icons.Wrench className="w-6 h-6 text-white" />
+                                                    </button>
 
-                                                {/* Radial/Popout Menu Options */}
-                                                {showLocalMenu && (
-                                                    <div className="absolute flex flex-col gap-3 items-center" style={{top: '4.5rem'}}> 
-                                                        <button 
-                                                            onClick={resetLocalGame}
-                                                            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-red-600 transition-colors animate-in fade-in slide-in-from-top-2 whitespace-nowrap"
-                                                        >
-                                                            <Icons.RotateCcw className="w-4 h-4" /> New Game
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => { setShowToolsModal(true); setShowLocalMenu(false); }}
-                                                            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-75 whitespace-nowrap"
-                                                        >
-                                                            <Icons.Dices className="w-4 h-4" /> Tools
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => { setShowHistoryModal(true); setShowLocalMenu(false); }}
-                                                            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-100 whitespace-nowrap"
-                                                        >
-                                                            <Icons.Clock className="w-4 h-4" /> History
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => { setShowCardSearch(true); setShowLocalMenu(false); }}
-                                                            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-150 whitespace-nowrap"
-                                                        >
-                                                            <Icons.Search className="w-4 h-4" /> Database
-                                                        </button>
-                                                    </div>
-                                                )}
+                                                    {/* Radial/Popout Menu Options */}
+                                                    {showLocalMenu && (
+                                                        <div className="absolute flex flex-col gap-3 items-center" style={{top: '4.5rem'}}> 
+                                                            <button 
+                                                                onClick={resetLocalGame}
+                                                                className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-red-600 transition-colors animate-in fade-in slide-in-from-top-2 whitespace-nowrap"
+                                                            >
+                                                                <Icons.RotateCcw className="w-4 h-4" /> New Game
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => { setShowToolsModal(true); setShowLocalMenu(false); }}
+                                                                className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-75 whitespace-nowrap"
+                                                            >
+                                                                <Icons.Dices className="w-4 h-4" /> Tools
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => { setShowHistoryModal(true); setShowLocalMenu(false); }}
+                                                                className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-100 whitespace-nowrap"
+                                                            >
+                                                                <Icons.Clock className="w-4 h-4" /> History
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => { setShowCardSearch(true); setShowLocalMenu(false); }}
+                                                                className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-150 whitespace-nowrap"
+                                                            >
+                                                                <Icons.Search className="w-4 h-4" /> Database
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
