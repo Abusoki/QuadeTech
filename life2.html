@@ -135,7 +135,6 @@
             }
         };
 
-        // NEW: Helper to record death statistics when a room is closed
         const recordDeathStats = async (players) => {
             if (!players || players.length === 0) return;
             
@@ -160,7 +159,6 @@
                 }
             });
 
-            // Only update if there are deaths to record
             if (Object.values(deaths).some(v => v > 0)) {
                 const statsRef = doc(db, 'artifacts', appId, 'public', 'data', 'global_stats', 'deaths');
                 try {
@@ -374,7 +372,7 @@
                             <Icons.Search className="text-slate-400 w-5 h-5" />
                             <input
                                 type="text"
-                                placeholder={mode === 'commander' ? "Search Commander..." : "Search Any Card..."}
+                                placeholder={mode === 'commander' ? "Search Commander..." : "Search Scryfall For Any Card.."}
                                 className="bg-transparent border-none outline-none text-white w-full placeholder:text-slate-500"
                                 value={query}
                                 onChange={handleInput}
@@ -415,7 +413,7 @@
             );
         };
 
-        // 5. Stats Page (Updated with Death Stats)
+        // 5. Stats Page
         const StatsPage = ({ user }) => {
             const [stats, setStats] = useState({ topCommanders: [], topCommander: null, deathStats: null });
             const [loading, setLoading] = useState(true);
@@ -643,8 +641,10 @@
                             <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2"><h3 className="text-white font-bold flex items-center gap-2"><Icons.Sliders className="w-4 h-4 text-purple-400"/> Damage & Counters</h3><button onClick={() => setShowTools(false)}><Icons.X className="w-5 h-5 text-slate-400 hover:text-white" /></button></div>
                             <div className="flex-1 overflow-y-auto space-y-4">
                                 <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700"><div className="flex justify-between items-center mb-2"><span className="text-sm font-semibold text-green-400 flex items-center gap-2"><Icons.Droplet className="w-4 h-4"/> Poison (Infect)</span><span className="text-xs text-slate-500">Die at 10</span></div><div className="flex items-center justify-between bg-slate-900 rounded-lg p-2"><button onClick={() => adjustPoison(-1)} className="w-8 h-8 flex items-center justify-center bg-slate-700 rounded text-white hover:bg-slate-600">-</button><span className="font-mono text-xl text-white font-bold">{poison || 0}</span><button onClick={() => adjustPoison(1)} className="w-8 h-8 flex items-center justify-center bg-slate-700 rounded text-white hover:bg-slate-600">+</button></div></div>
-                                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700"><div className="flex justify-between items-center mb-2"><span className="text-sm font-semibold text-blue-400 flex items-center gap-2"><Icons.Book className="w-4 h-4"/> Library (Mill)</span><span className="text-xs text-slate-500">Die if Milled</span></div><div className="flex items-center justify-between bg-slate-900 rounded-lg p-2"><span className="text-sm text-slate-300 ml-2">Milled Out?</span><button onClick={toggleMilled} className={`px-4 py-2 rounded-lg font-bold transition-colors ${milled ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>{milled ? "YES (Dead)" : "NO"}</button></div></div>
+                                
                                 <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700"><div className="flex justify-between items-center mb-2"><span className="text-sm font-semibold text-red-400 flex items-center gap-2"><Icons.Sword className="w-4 h-4"/> Commander Damage</span><span className="text-xs text-slate-500">Die at 21</span></div><div className="space-y-2">{players.filter(p => p.id !== id).map(opponent => { const dmg = commanderDamage[opponent.id] || 0; return (<div key={opponent.id} className="flex items-center justify-between bg-slate-900 rounded-lg p-2"><div className="flex items-center gap-2 overflow-hidden mr-2"><div className={`w-2 h-8 rounded-full ${opponent.id === id ? 'bg-purple-500' : 'bg-slate-600'}`}></div><div className="flex flex-col truncate"><span className="text-xs font-bold text-white truncate">{opponent.commander?.name || opponent.name}</span><span className="text-[10px] text-slate-500 uppercase">From {opponent.name}</span></div></div><div className="flex items-center gap-3 shrink-0"><button onClick={() => adjustCmdrDamage(opponent.id, -1)} className="w-8 h-8 flex items-center justify-center bg-slate-700 rounded text-white hover:bg-slate-600">-</button><span className={`font-mono text-lg font-bold w-6 text-center ${dmg >= 21 ? 'text-red-500' : 'text-white'}`}>{dmg}</span><button onClick={() => adjustCmdrDamage(opponent.id, 1)} className="w-8 h-8 flex items-center justify-center bg-slate-700 rounded text-white hover:bg-slate-600">+</button></div></div>);})}</div></div>
+                                
+                                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700"><div className="flex justify-between items-center mb-2"><span className="text-sm font-semibold text-blue-400 flex items-center gap-2"><Icons.Book className="w-4 h-4"/> Library (Mill)</span><span className="text-xs text-slate-500">Die if Milled</span></div><div className="flex items-center justify-between bg-slate-900 rounded-lg p-2"><span className="text-sm text-slate-300 ml-2">Milled Out?</span><button onClick={toggleMilled} className={`px-4 py-2 rounded-lg font-bold transition-colors ${milled ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>{milled ? "YES (Dead)" : "NO"}</button></div></div>
                             </div>
                         </div>
                     )}
