@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cardboard Bonfire</title>
+    <title>MTG Companion</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -90,15 +90,16 @@
             Unlock: (p) => <Icon {...p} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>} />,
             Share: (p) => <Icon {...p} path={<><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></>} />,
             Copy: (p) => <Icon {...p} path={<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>} />,
-            Trash: (p) => <Icon {...p} path={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>} />
+            Trash: (p) => <Icon {...p} path={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>} />,
+            BookOpen: (p) => <Icon {...p} path={<><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></>} />
         };
 
         // --- Gemini API Utility ---
         const GEMINI_MODEL = 'gemini-2.5-flash-preview-09-2025';
-        const API_KEY = ""; 
+        const apiKey = ""; 
 
         const geminiApiCall = async (userQuery, systemPrompt, useGrounding = true) => {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${API_KEY}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
             
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
@@ -167,16 +168,13 @@
         };
 
         // --- Helpers ---
-        // Helper to update persistent historical stats
         const updateCommanderStat = async (commander) => {
             if (!commander || !commander.name) return;
-            // Reference to the persistent historical stats collection
             const statRef = doc(db, 'artifacts', appId, 'public', 'data', 'commander_stats', commander.name);
             try {
-                // Using increment(1) for atomic updates
                 await setDoc(statRef, {
                     name: commander.name,
-                    image: commander.image, // Overwrite with latest image url if needed
+                    image: commander.image,
                     fullImage: commander.fullImage,
                     artist: commander.artist || 'Unknown',
                     count: increment(1),
@@ -189,8 +187,8 @@
 
         // --- Components ---
 
-        // 1. Commander Search
-        const CommanderSearch = ({ onSelect, onClose }) => {
+        // 1. Unified Card Search (For Commander and General Use)
+        const CardSearch = ({ onSelect, onClose, mode = 'commander' }) => {
             const [query, setQuery] = useState('');
             const [results, setResults] = useState([]);
             const [loading, setLoading] = useState(false);
@@ -203,7 +201,12 @@
                 }
                 setLoading(true);
                 try {
-                    const response = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q + ' (is:commander) (game:paper)')}`);
+                    let searchParams = `q=${encodeURIComponent(q + ' (game:paper)')}`;
+                    if (mode === 'commander') {
+                        searchParams = `q=${encodeURIComponent(q + ' (is:commander) (game:paper)')}`;
+                    }
+                    
+                    const response = await fetch(`https://api.scryfall.com/cards/search?${searchParams}`);
                     const data = await response.json();
                     if (data.data) {
                         setResults(data.data.slice(0, 20));
@@ -231,7 +234,7 @@
                             <Icons.Search className="text-slate-400 w-5 h-5" />
                             <input
                                 type="text"
-                                placeholder="Search Commander..."
+                                placeholder={mode === 'commander' ? "Search Commander..." : "Search Any Card..."}
                                 className="bg-transparent border-none outline-none text-white w-full placeholder:text-slate-500"
                                 value={query}
                                 onChange={handleInput}
@@ -241,7 +244,7 @@
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-2">
                             {loading && <div className="text-center text-slate-500 py-8">Searching Scryfall...</div>}
-                            {!loading && results.length === 0 && query.length > 2 && <div className="text-center text-slate-500 py-8">No commanders found.</div>}
+                            {!loading && results.length === 0 && query.length > 2 && <div className="text-center text-slate-500 py-8">No cards found.</div>}
                             {results.map((card) => (
                                 <div
                                     key={card.id}
@@ -260,7 +263,10 @@
                                             <div className="w-full h-full flex items-center justify-center text-xs text-slate-600">?</div>
                                         )}
                                     </div>
-                                    <div className="text-sm font-medium text-slate-200 group-hover:text-purple-400">{card.name}</div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-medium text-slate-200 group-hover:text-purple-400 truncate">{card.name}</div>
+                                        <div className="text-xs text-slate-500 truncate">{card.type_line}</div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -374,14 +380,13 @@
             );
         };
 
-        // 3. Stats Page (Now pulls from persistent 'commander_stats')
+        // 3. Stats Page
         const StatsPage = ({ user }) => {
             const [stats, setStats] = useState({ topCommanders: [], topCommander: null });
             const [loading, setLoading] = useState(true);
 
             useEffect(() => {
                 if (!user) return;
-                // Query the PERSISTENT historical stats collection
                 const statsRef = collection(db, 'artifacts', appId, 'public', 'data', 'commander_stats');
                 
                 const unsubscribe = onSnapshot(statsRef, (snapshot) => {
@@ -390,7 +395,6 @@
                         commanders.push(doc.data());
                     });
 
-                    // Sort by count descending
                     const sortedCommanders = commanders
                         .sort((a, b) => (b.count || 0) - (a.count || 0))
                         .slice(0, 5);
@@ -456,6 +460,13 @@
                                             {stats.topCommander.count} Total Picks
                                         </div>
                                     </div>
+                                    {/* Artist Info for Stats Page */}
+                                    {stats.topCommander.artist && (
+                                        <div className="absolute bottom-2 right-2 text-[10px] text-white/40 font-medium text-right leading-tight z-10">
+                                            <div>Art by {stats.topCommander.artist}</div>
+                                            <div>™ & © Wizards of the Coast</div>
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <div className="flex flex-col items-center justify-center text-slate-600 gap-4">
@@ -594,7 +605,7 @@
                     </div>
 
                     {/* Modals & Overlays */}
-                    {showCmdrSearch && <CommanderSearch onSelect={(c) => { onUpdate(id, { commander: c }); setShowCmdrSearch(false); }} onClose={() => setShowCmdrSearch(false)} />}
+                    {showCmdrSearch && <CardSearch onSelect={(c) => { onUpdate(id, { commander: c }); setShowCmdrSearch(false); }} onClose={() => setShowCmdrSearch(false)} mode="commander" />}
                     {commander?.name && showAssistant && <CommanderAssistant commander={commander} onClose={() => setShowAssistant(false)} />}
                     
                     {/* Tools / Counters Overlay */}
@@ -655,30 +666,13 @@
             );
         };
 
-        // 5. Contact Page
-        const ContactPage = () => (
-             <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
-                <div className="bg-slate-900/50 backdrop-blur-lg p-8 rounded-2xl border border-slate-700 shadow-2xl max-w-md w-full">
-                    <div className="w-16 h-16 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <Icons.Mail className="w-8 h-8 text-purple-500" />
-                    </div>
-                    <h1 className="text-3xl font-bold text-white mb-2">Get in Touch</h1>
-                    <p className="text-slate-400 mb-8">Have feedback or feature requests? We'd love to hear from you.</p>
-                    
-                    <a href="mailto:CardboardBonFire@gmail.com" className="block w-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-medium py-4 px-6 rounded-xl transition-all hover:border-purple-500 group">
-                        <span className="text-xs text-slate-500 uppercase tracking-wider block mb-1 group-hover:text-purple-400">Email Us At</span>
-                        <span className="text-lg break-all">CardboardBonFire@gmail.com</span>
-                    </a>
-                </div>
-            </div>
-        );
-
         // 6. Online Room (Updated with Timeout & Stat Recording)
         const OnlineRoom = ({ user, onLeave }) => {
             const [joinedRoom, setJoinedRoom] = useState(null);
             const [error, setError] = useState('');
             const [players, setPlayers] = useState([]);
             const [showCopiedToast, setShowCopiedToast] = useState(false);
+            const [showCardSearch, setShowCardSearch] = useState(false); // NEW State
             
             // Lobby State
             const [rooms, setRooms] = useState([]);
@@ -690,6 +684,17 @@
             
             const TIMEOUT_INACTIVITY = 20 * 60 * 1000; // 20 minutes
             const TIMEOUT_DURATION = 12 * 60 * 60 * 1000; // 12 hours
+
+            // --- Display Name Caching ---
+            useEffect(() => {
+                const storedName = localStorage.getItem('mtg_username');
+                if (storedName) setPlayerName(storedName);
+            }, []);
+
+            const updatePlayerName = (name) => {
+                setPlayerName(name);
+                localStorage.setItem('mtg_username', name);
+            };
 
             const getMillis = (ts) => {
                 if (!ts) return Date.now();
@@ -756,7 +761,6 @@
                         log: [] 
                     });
                     
-                    // Count host's commander if they somehow start with one (unlikely but safe)
                     if (playerData.commander && hostName !== "Test") {
                         updateCommanderStat(playerData.commander);
                     }
@@ -799,7 +803,6 @@
                 setTimeout(() => setShowCopiedToast(false), 2000);
             };
 
-            // NEW: Host Close Room Function
             const closeRoom = async () => {
                 if (!joinedRoom) return;
                 if (confirm("Are you sure you want to CLOSE this room? It will be deleted for all players.")) {
@@ -820,7 +823,6 @@
                     if (docSnap.exists()) {
                         const data = docSnap.data();
                         
-                        // Check Timeouts inside room
                         const now = Date.now();
                         const created = getMillis(data.createdAt);
                         const lastActive = getMillis(data.lastActivity);
@@ -876,10 +878,9 @@
                 const newPlayers = players.map(p => p.id === user.uid ? { ...p, ...updates } : p);
                 await updateDoc(roomRef, { 
                     players: newPlayers,
-                    lastActivity: serverTimestamp() // Update activity on any change
+                    lastActivity: serverTimestamp() 
                 });
 
-                // Record stat if commander changed and room is not Test
                 if (updates.commander && joinedRoom !== "Test") {
                     updateCommanderStat(updates.commander);
                 }
@@ -887,7 +888,6 @@
 
             // Game View
             if (joinedRoom) {
-                // Check if I am the host (first player in the list)
                 const isHost = players.length > 0 && players[0].id === user.uid;
 
                 return (
@@ -947,8 +947,25 @@
 
             // Lobby View
             return (
-                <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto">
-                    <div className="max-w-4xl mx-auto w-full space-y-8">
+                <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto relative">
+                    {/* Global Card Search (Lobby Only) */}
+                    <button 
+                        onClick={() => setShowCardSearch(true)}
+                        className="absolute top-4 right-4 md:right-8 bg-slate-800 hover:bg-slate-700 text-white p-2 rounded-full shadow-lg border border-slate-600 transition-colors z-20 flex items-center gap-2 px-4"
+                    >
+                        <Icons.Search className="w-4 h-4 text-purple-400" />
+                        <span className="text-sm font-bold">Card Database</span>
+                    </button>
+
+                    {showCardSearch && (
+                        <CardSearch 
+                            onSelect={() => {}} 
+                            onClose={() => setShowCardSearch(false)} 
+                            mode="any" 
+                        />
+                    )}
+
+                    <div className="max-w-4xl mx-auto w-full space-y-8 mt-12 md:mt-0">
                         
                         {/* Header & Player Name */}
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 p-6 rounded-2xl border border-slate-700">
@@ -968,7 +985,7 @@
                                     placeholder="Enter Your Name..." 
                                     className="w-full md:w-64 bg-slate-800 border border-slate-600 text-white p-3 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold"
                                     value={playerName}
-                                    onChange={(e) => setPlayerName(e.target.value)}
+                                    onChange={(e) => updatePlayerName(e.target.value)}
                                 />
                             </div>
                         </div>
@@ -993,7 +1010,7 @@
                                                     key={room.id}
                                                     onClick={() => {
                                                         setSelectedRoomId(room.id);
-                                                        setHostName(''); // Clear manual entry
+                                                        setHostName(''); 
                                                     }}
                                                     className={`p-4 flex items-center justify-between cursor-pointer transition-colors ${selectedRoomId === room.id ? 'bg-purple-900/20 border-l-4 border-purple-500' : 'hover:bg-slate-800 border-l-4 border-transparent'}`}
                                                 >
@@ -1095,15 +1112,15 @@
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.8.0 - Host Controls & AI</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Room Management & AI Stability</h3>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.9.0 - QoL & Fixes</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Search, Stats & Stability</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Host Close Room:</strong> The room host now has a trash can icon to permanently delete the room for everyone.</li>
-                        <li><strong className="text-slate-200">Robust AI Strategy:</strong> The Strategy Assistant is now smarter. If it fails to connect with real-time web grounding, it will automatically retry to provide a general strategy based on its internal knowledge.</li>
-                        <li><strong className="text-slate-200">AI Error Reporting:</strong> Detailed error messages are now shown if the AI service is unavailable.</li>
+                        <li><strong className="text-slate-200">Global Card Database:</strong> Access the Scryfall database directly from the lobby to check card details.</li>
+                        <li><strong className="text-slate-200">Name Caching:</strong> Your display name is now saved, so you don't have to re-type it every session.</li>
+                        <li><strong className="text-slate-200">Stats Art Credit:</strong> Artist and copyright information is now displayed on the Global Stats leaderboard.</li>
+                        <li><strong className="text-slate-200">AI Fixes:</strong> Fixed an authentication error with the Strategy Assistant and added a fallback for better reliability.</li>
                     </ul>
                 </div>
-                {/* ... existing changelogs ... */}
             </div>
         );
 
