@@ -365,9 +365,9 @@
     }
 
     // ----------------------------------------------------------------------
-    // LOCAL PAGE (offline life tracker; cached in browser)
+    // LOCAL PAGE (offline life tracker; single add box; no lobby name)
     // ----------------------------------------------------------------------
-    const LOCAL_STORAGE_KEY = 'localRoom_v1';
+    const LOCAL_STORAGE_KEY = 'localRoom_v2';
 
     function getLocalData(){
       const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -392,22 +392,19 @@
             <div class="muted" style="font-size:.9rem;margin-top:6px">Offline life tracking. Data stays in your browser.</div>
           </div>
           <div class="row">
-            <button id="local-new-btn" class="btn-secondary">New Lobby</button>
+            <button id="local-new-btn" class="btn-secondary">New Local Session</button>
             ${cached ? `<button id="local-reset-btn" class="btn-danger">Clear Local Data</button>` : ``}
           </div>
         </div>
       `;
 
+      // Single add-player box (no lobby name)
       html += `
         <div id="local-setup" style="background:#121416;padding:12px;border-radius:8px;border:1px solid var(--dark-border);margin-bottom:12px">
           <div class="row" style="gap:12px">
-            <div style="flex:1"><input type="text" id="local-room-name" placeholder="Lobby name (e.g., Kitchen Table)"></div>
-            <div style="width:180px"><button id="local-create-btn" class="btn-primary" style="width:100%">Create Lobby</button></div>
-          </div>
-          <div class="row" style="gap:12px;margin-top:8px">
             <div style="flex:1"><input type="text" id="local-player-name" placeholder="Player name"></div>
             <div style="width:220px"><input type="text" id="local-commander-name" placeholder="Commander (optional)"></div>
-            <div style="width:160px"><button id="local-add-player-btn" class="btn-secondary" style="width:100%">Add Player</button></div>
+            <div style="width:160px"><button id="local-add-player-btn" class="btn-primary" style="width:100%">Add Player</button></div>
           </div>
           <p id="local-status" class="muted" style="margin-top:8px"></p>
         </div>
@@ -416,12 +413,14 @@
       html += `<div id="local-room-container"></div>`;
       appContainer.innerHTML = html;
 
-      // Wire header actions
+      // Header actions
       document.getElementById('local-new-btn').addEventListener('click', ()=>{
         resetLocalRoom();
+        const init = { roomName: 'Local Lobby', createdAt: Date.now(), playersOrder: [], players: {} };
+        setLocalData(init);
         const status = document.getElementById('local-status');
-        if(status) status.textContent = 'Started a new local lobby. Set a name and add players.';
-        renderLocal(); // re-render fresh
+        if(status) status.textContent = 'New local session started. Add players below.';
+        renderLocalRoom(init);
       });
       const resetBtn = document.getElementById('local-reset-btn');
       if(resetBtn){
@@ -432,60 +431,41 @@
         });
       }
 
-      // If cached, show it and skip initial guidance
-      if(cached){
-        renderLocalRoom(cached);
-      }else{
-        const status = document.getElementById('local-status');
-        if(status) status.textContent = 'Enter a lobby name, add players, and track life — no internet needed.';
+      // Initial render: ensure a local session exists (no name needed)
+      let data = cached || { roomName: 'Local Lobby', createdAt: Date.now(), playersOrder: [], players: {} };
+      setLocalData(data);
+      renderLocalRoom(data);
 
-        // Create lobby
-        document.getElementById('local-create-btn').addEventListener('click', ()=>{
-          const name = (document.getElementById('local-room-name').value || '').trim();
-          if(!name){
-            document.getElementById('local-status').textContent = 'Please provide a lobby name.';
-            return;
-          }
-          const init = { roomName: name, createdAt: Date.now(), playersOrder: [], players: {} };
-          setLocalData(init);
-          renderLocalRoom(init);
-        });
-
-        // Allow adding players even before create (auto-create lobby)
-        document.getElementById('local-add-player-btn').addEventListener('click', ()=>{
-          let data = getLocalData();
-          if(!data){
-            const name = (document.getElementById('local-room-name').value || '').trim() || 'Local Lobby';
-            data = { roomName: name, createdAt: Date.now(), playersOrder: [], players: {} };
-          }
-          const playerName = (document.getElementById('local-player-name').value || '').trim();
-          const commander = (document.getElementById('local-commander-name').value || '').trim();
-          if(!playerName){
-            document.getElementById('local-status').textContent = 'Enter a player name.';
-            return;
-          }
-          const pid = uid();
-          data.players[pid] = {
-            name: playerName,
-            life: getStartingLife(),
-            infect: 0,
-            commanderName: commander || '',
-            commanderDamage: {}
-          };
-          data.playersOrder.push(pid);
-          setLocalData(data);
-          document.getElementById('local-player-name').value = '';
-          document.getElementById('local-commander-name').value = '';
-          renderLocalRoom(data);
-        });
-      }
+      // Add player from single box
+      document.getElementById('local-add-player-btn').addEventListener('click', ()=>{
+        const playerName = (document.getElementById('local-player-name').value || '').trim();
+        const commander = (document.getElementById('local-commander-name').value || '').trim();
+        if(!playerName){
+          const status = document.getElementById('local-status');
+          if(status) status.textContent = 'Enter a player name.';
+          return;
+        }
+        const d = getLocalData() || data;
+        const pid = uid();
+        d.players[pid] = {
+          name: playerName,
+          life: getStartingLife(),
+          infect: 0,
+          commanderName: commander || '',
+          commanderDamage: {}
+        };
+        d.playersOrder.push(pid);
+        setLocalData(d);
+        document.getElementById('local-player-name').value = '';
+        document.getElementById('local-commander-name').value = '';
+        renderLocalRoom(d);
+      });
     }
 
     function renderLocalRoom(roomData){
       const container = document.getElementById('local-room-container');
       if(!container) return;
 
-      // Build players array in intended order
       const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
         ? [...roomData.playersOrder]
         : Object.keys(roomData.players || {});
@@ -502,24 +482,13 @@
         </div>
       `;
 
-      // Add quick-add row (inline to room view)
-      html += `
-        <div style="background:#121416;padding:12px;border-radius:8px;border:1px solid var(--dark-border);margin-bottom:12px">
-          <div class="row" style="gap:12px">
-            <div style="flex:1"><input type="text" id="local-player-name-inline" placeholder="Add player name"></div>
-            <div style="width:220px"><input type="text" id="local-commander-name-inline" placeholder="Commander (optional)"></div>
-            <div style="width:160px"><button id="local-add-player-inline" class="btn-secondary" style="width:100%">Add Player</button></div>
-          </div>
-        </div>
-      `;
-
       html += `<div class="player-grid">`;
 
       playerIds.forEach(pid=>{
         const p = roomData.players[pid];
         if(!p) return;
 
-        // Calculate elimination status for local: life <= 0 or incoming CMD from single opp >= 21
+        // Elimination: life <= 0 or incoming CMD from any single opponent >= 21
         const maxSingleIncoming = (() => {
           let maxVal = 0;
           Object.keys(roomData.players || {}).forEach(oppId=>{
@@ -531,7 +500,6 @@
         })();
         const isEliminated = (p.life <= 0) || (maxSingleIncoming >= 21);
 
-        // CMD breakdown shown similar to live view
         const outgoingTotal = computeOutgoingTotal(roomData, pid);
         const outgoingBreakdown = computeOutgoingCmdDamage(roomData, pid);
 
@@ -652,7 +620,7 @@
 
       container.innerHTML = html;
 
-      // Wire room-level actions
+      // Room-level actions
       document.getElementById('local-restart-btn').addEventListener('click', ()=>{
         if(!confirm("Restart game: reset all players' life to default and clear all commander damage and infect?")) return;
         const data = getLocalData() || roomData;
@@ -667,25 +635,9 @@
         renderLocalRoom(data);
       });
 
-      // Wire quick add inline
-      document.getElementById('local-add-player-inline').addEventListener('click', ()=>{
-        const data = getLocalData() || roomData;
-        const playerName = (document.getElementById('local-player-name-inline').value || '').trim();
-        const commander = (document.getElementById('local-commander-name-inline').value || '').trim();
-        if(!playerName) return;
-        const pid = uid();
-        data.players[pid] = { name: playerName, life: getStartingLife(), infect: 0, commanderName: commander || '', commanderDamage: {} };
-        data.playersOrder = Array.isArray(data.playersOrder) ? data.playersOrder : [];
-        data.playersOrder.push(pid);
-        setLocalData(data);
-        document.getElementById('local-player-name-inline').value = '';
-        document.getElementById('local-commander-name-inline').value = '';
-        renderLocalRoom(data);
-      });
-
-      // Wire panel actions
+      // Panel actions
       container.querySelectorAll('.control-btn').forEach(btn=>{
-        btn.addEventListener('click', async ()=>{
+        btn.addEventListener('click', ()=>{
           const localAction = btn.dataset.localAction;
           const pid = btn.dataset.player;
 
@@ -733,7 +685,6 @@
             controls.classList.toggle('open');
           }
           else if(localAction === 'edit-commander'){
-            // Inline edit prompt for local commander name
             const current = data.players[pid].commanderName || '';
             const next = prompt('Enter commander name:', current || '');
             if(next !== null){
@@ -752,7 +703,7 @@
         });
       });
 
-      // Wire per-opp editor inputs and +/- (local)
+      // Per-opponent editor inputs and +/- (local)
       container.querySelectorAll('.cmd-target-input').forEach(input=>{
         input.addEventListener('change', ()=>{
           const target = input.dataset.target;
@@ -763,11 +714,7 @@
           dmgMap[target] = val;
           data.players[opp].commanderDamage = dmgMap;
           setLocalData(data);
-          // Update outgoing total display quickly
-          const total = computeOutgoingTotal(data, target);
-          const totalEl = document.getElementById(`local-cmd-to-${target}`);
-          if(totalEl) totalEl.textContent = total;
-          renderLocalRoom(data); // re-render to reflect breakdowns
+          renderLocalRoom(data);
         });
       });
       container.querySelectorAll('[data-local-action="cmd-target-add"]').forEach(btn=>{
@@ -1177,10 +1124,11 @@
         </div>
       `;
 
+      const appContainer = document.getElementById("app-container");
       appContainer.innerHTML = html;
 
       // render chat
-      renderChat(roomData.chatLog || [], currentPlayerName);
+      renderChat(roomData.chatLog || [], roomData.players[userId]?.name || 'You');
 
       // reapply openCmdControls state after render
       const playerIdsAfter = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
@@ -1269,7 +1217,7 @@
           e.preventDefault();
           const input = document.getElementById('chat-message-input');
           const message = input.value.trim();
-          if(message){ sendChatMessage(message, currentPlayerName); input.value = ''; }
+          if(message){ sendChatMessage(message, roomData.players[userId]?.name || 'You'); input.value = ''; }
         });
       }
 
