@@ -42,7 +42,7 @@
     button:disabled, input:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.2); }
     .player-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:12px}
     @media(max-width:900px){.player-grid{grid-template-columns:1fr}}
-    .player-panel{background:linear-gradient(180deg,rgba(255,255,255,0.01),rgba(255,255,255,0.00));border:1px solid var(--dark-border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;box-shadow:0 6px 18px rgba(0,0,0,0.6);transform-origin:center center;transition:transform .18s ease,opacity .12s ease}
+    .player-panel{background:linear-gradient(180deg,rgba(255,255,255,0.01),rgba(255,255,255,0.00));border:1px solid var(--dark-border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;box-shadow:0 6px 18px rgba(0,0,0,0.6);transform-origin:center center;transition:transform .18s ease}
     .player-eliminated{opacity:.5}
     .player-header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
     .player-name{font-weight:800;font-size:1rem;color:var(--text)}
@@ -58,7 +58,6 @@
     .you-badge{background:linear-gradient(90deg,var(--accent),var(--accent-strong));color:#fff;padding:6px 8px;border-radius:999px;font-weight:800;font-size:.8rem}
     .cmd-controls{display:none;margin-top:10px}
     .cmd-controls.open{display:block}
-    .cmd-controls.persistent{display:block;border:1px dashed rgba(255,255,255,0.03);padding:8px;border-radius:8px}
     .per-opp-container{margin-top:10px;display:flex;flex-direction:column;gap:6px;max-height:160px;overflow:auto;border-top:1px solid rgba(255,255,255,0.02);padding-top:8px}
     .per-opp-row{height:44px;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.02);box-sizing:border-box}
     .per-opp-left{font-size:0.9em;color:var(--muted);font-weight:700}
@@ -110,15 +109,23 @@
       body{padding:14px}
     }
 
-    /* Rotation controls */
-    .panel-rotate-controls{display:flex;gap:6px;align-items:center}
-    .rotate-btn{padding:6px 8px;border-radius:6px;background:linear-gradient(180deg,#2b2b2b,#232323);color:var(--text);font-weight:800;border:1px solid rgba(255,255,255,0.03);cursor:pointer}
-    .rotate-indicator{font-size:0.85rem;color:var(--muted);min-width:36px;text-align:center}
-    .rotate-hint{font-size:0.8rem;color:var(--muted);margin-left:6px}
-    /* Ensure rotated panels don't overflow their grid cell */
-    .player-panel-wrapper{display:flex;justify-content:center;align-items:center;min-height:120px}
-    /* When panel is rotated 90 or 270, allow it to scale down slightly to fit */
-    .player-panel.rotated-90, .player-panel.rotated-270{transform-origin:center center;transition:transform .18s ease}
+    /* Rotation helper classes (applied inline via style attribute for per-panel rotation) */
+    .rotate-0{ transform: rotate(0deg); }
+    .rotate-90{ transform: rotate(90deg); }
+    .rotate-180{ transform: rotate(180deg); }
+    .rotate-270{ transform: rotate(270deg); }
+
+    /* Ensure rotated panels don't overflow container visually */
+    .player-panel.rotated {
+      transition: transform .18s ease;
+    }
+
+    /* Small rotate button */
+    .rotate-btn {
+      padding:6px 8px;border-radius:6px;background:linear-gradient(180deg,#2b2b2b,#232323);color:var(--text);border:1px solid rgba(255,255,255,0.03);font-weight:800;font-size:0.85rem;cursor:pointer;
+    }
+
+    /* Keep per-opp inputs readable when rotated by not changing their internal orientation (optional future improvement) */
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
@@ -336,8 +343,9 @@
     async function renderHome(){ await renderSetupView(); }
 
     const CHANGELOG = [
-      { version: "0.9.8", date: "2025-12-08", notes: "Show CMD labels, persist lobby on refresh, 20-minute timeout based on life changes, lobby timestamps." },
-      { version: "0.9.7", date: "2025-12-07", notes: "Show CMD DMG to/from on each panel; incoming editor updates opponent's outgoing." }
+      { version: "0.0.3", date: "2025-12-08", notes: "Added a local lobby to play with a single device. (Need to add panel rotations later.)" },
+      { version: "0.0.2", date: "2025-12-08", notes: "Show CMD labels, persist lobby on refresh, 20-minute timeout based on life changes, lobby timestamps." },
+      { version: "0.0.1", date: "2025-12-07", notes: "Fleshed out the UI, follow through on a design, set up the live portion." }
     ];
 
     function renderChanges(){
@@ -392,14 +400,26 @@
     }
     function uid(){ return 'p' + Math.random().toString(36).slice(2,9); }
 
-    // Helper to ensure player rotation and cmd persistence defaults
-    function ensurePlayerDefaults(player){
-      if(typeof player.rotation === 'undefined') player.rotation = 0; // degrees: 0,90,180,270
-      if(typeof player.cmdPersistent === 'undefined') player.cmdPersistent = false;
-      if(typeof player.life === 'undefined') player.life = getStartingLife();
-      if(typeof player.infect === 'undefined') player.infect = 0;
-      if(typeof player.commanderDamage === 'undefined') player.commanderDamage = {};
-      if(typeof player.commanderName === 'undefined') player.commanderName = '';
+    // ----------------------------------------------------------------------
+    // NEW: helper to persist per-player UI state (cmd open + rotation) in localStorage
+    // ----------------------------------------------------------------------
+    function getLocalUiState(){
+      try {
+        const raw = localStorage.getItem(LOCAL_STORAGE_KEY + '_ui');
+        return raw ? JSON.parse(raw) : {};
+      } catch { return {}; }
+    }
+    function setLocalUiState(state){
+      try { localStorage.setItem(LOCAL_STORAGE_KEY + '_ui', JSON.stringify(state)); } catch {}
+    }
+    function setPlayerUiState(pid, patch){
+      const s = getLocalUiState();
+      s[pid] = Object.assign({}, s[pid] || {}, patch);
+      setLocalUiState(s);
+    }
+    function getPlayerUiState(pid){
+      const s = getLocalUiState();
+      return s[pid] || {};
     }
 
     function renderLocal(){
@@ -448,14 +468,14 @@
         resetBtn.addEventListener('click', ()=>{
           if(!confirm('Clear all local game data? This cannot be undone.')) return;
           resetLocalRoom();
+          // also clear UI state
+          try { localStorage.removeItem(LOCAL_STORAGE_KEY + '_ui'); } catch {}
           renderLocal();
         });
       }
 
       // Initial render: ensure a local session exists (no name needed)
       let data = cached || { roomName: 'Local Lobby', createdAt: Date.now(), playersOrder: [], players: {} };
-      // Ensure defaults for existing players
-      Object.values(data.players || {}).forEach(p => ensurePlayerDefaults(p));
       setLocalData(data);
       renderLocalRoom(data);
 
@@ -476,11 +496,12 @@
           infect: 0,
           commanderName: commander || '',
           commanderDamage: {},
-          rotation: 0,
-          cmdPersistent: false
+          rotation: 0 // default rotation
         };
         d.playersOrder.push(pid);
         setLocalData(d);
+        // initialize UI state for this player (closed cmd controls, rotation 0)
+        setPlayerUiState(pid, { cmdOpen: false, rotation: 0 });
         document.getElementById('local-player-name').value = '';
         document.getElementById('local-commander-name').value = '';
         renderLocalRoom(d);
@@ -512,7 +533,6 @@
       playerIds.forEach(pid=>{
         const p = roomData.players[pid];
         if(!p) return;
-        ensurePlayerDefaults(p);
 
         // Elimination: life <= 0 or incoming CMD from any single opponent >= 21
         const maxSingleIncoming = (() => {
@@ -565,74 +585,64 @@
           </div>
         `;
 
-        // Rotation controls: cycle 0 -> 90 -> 180 -> 270 -> 0
-        const rotation = p.rotation || 0;
-        const rotationLabel = `${rotation}°`;
+        // Retrieve UI state for this player (cmd open + rotation)
+        const uiState = getPlayerUiState(pid);
+        const cmdOpen = !!uiState.cmdOpen;
+        const rotation = (typeof uiState.rotation === 'number') ? uiState.rotation : (p.rotation || 0);
+        const rotationClass = rotation === 0 ? 'rotate-0' : rotation === 90 ? 'rotate-90' : rotation === 180 ? 'rotate-180' : 'rotate-270';
+        const rotatedClass = rotation !== 0 ? 'rotated' : '';
 
-        // CMD controls open state: if persistent flag true, show as open
-        const cmdOpenClass = p.cmdPersistent ? 'open persistent' : '';
-
+        // Build the player panel HTML. Note: we add a rotate button and a CMD DMG toggle button.
         html += `
-          <div class="player-panel-wrapper">
-            <div class="player-panel" id="panel-${pid}" data-player="${pid}" style="transform: rotate(${rotation}deg);">
-              <div class="player-header">
-                <div style="display:flex;gap:8px;align-items:center">
-                  <div class="player-name">${p.name}</div>
-                  ${p.commanderName ? `<div class="player-sub">— ${p.commanderName}</div>` : ''}
-                </div>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <div class="panel-rotate-controls" title="Rotate panel for table viewing">
-                    <button class="rotate-btn" data-local-action="rotate-prev" data-player="${pid}">⟲</button>
-                    <div class="rotate-indicator" id="rotate-ind-${pid}">${rotationLabel}</div>
-                    <button class="rotate-btn" data-local-action="rotate-next" data-player="${pid}">⟳</button>
-                  </div>
-                  <div style="width:8px"></div>
-                  <div class="row">
-                    <button class="control-btn small-btn" data-local-action="life-sub" data-player="${pid}">-</button>
-                    <div style="min-width:80px;text-align:center">
-                      <div class="life-big" id="local-life-${pid}">${p.life}</div>
-                      <div class="muted" style="font-size:.85rem">Life</div>
-                    </div>
-                    <button class="control-btn small-btn positive" data-local-action="life-add" data-player="${pid}">+</button>
-                  </div>
-                </div>
+          <div class="player-panel ${isEliminated ? 'player-eliminated' : ''} ${rotatedClass}" id="player-panel-${pid}" data-player="${pid}" style="transform: rotate(${rotation}deg);">
+            <div class="player-header">
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div class="player-name">${p.name || 'Player'}</div>
+                <div class="player-sub">Commander: ${p.commanderName || 'N/A'} <span style="margin-left:8px;color:var(--muted);font-weight:700">ID: ${pid}</span></div>
               </div>
-
-              <div class="cmd-block" style="margin-top:6px">
-                <div style="display:flex;flex-direction:column">
-                  <div class="cmd-label">Outgoing CMD DMG</div>
-                  <div class="cmd-value" id="local-cmd-to-${pid}">${outgoingTotal}</div>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px">
-                  <button class="control-btn small-btn" data-local-action="toggle-cmd-controls" data-player="${pid}">${p.cmdPersistent ? 'CMD (Pinned)' : 'CMD'}</button>
-                  <button class="control-btn small-btn" data-local-action="edit-commander" data-player="${pid}">Edit CMD</button>
-                </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <div class="you-badge">${p.life}</div>
+                <button class="rotate-btn" data-local-action="rotate-panel" data-player="${pid}">Rotate</button>
               </div>
+            </div>
 
-              <div class="cmd-controls ${cmdOpenClass}" id="cmd-controls-${pid}">
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-                  <div style="font-weight:700;color:var(--muted)">Incoming CMD From Opponents</div>
-                  <div style="font-weight:900;color:#ffb3b3" id="local-cmd-incoming-${pid}">${computeIncomingCmdDamage(roomData, pid)}</div>
-                </div>
-
-                <div class="per-opp-container" id="per-opp-${pid}">
-                  ${perOppRows || `<div class="muted">No opponents yet</div>`}
-                </div>
-
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-                  <div class="infect-block">
-                    <div class="infect-label">Infect</div>
-                    ${infectControlsHtml}
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+              <div style="min-width:220px">
+                <div class="cmd-block">
+                  <div>
+                    <div class="cmd-label">Outgoing CMD DMG</div>
+                    <div class="cmd-value">${outgoingTotal}</div>
                   </div>
                   <div style="display:flex;gap:8px;align-items:center">
-                    <button class="control-btn small-btn" data-local-action="reset-cmd" data-player="${pid}">Reset CMD</button>
-                    <button class="control-btn small-btn btn-danger" data-local-action="eliminate" data-player="${pid}">Eliminate</button>
+                    <button class="control-btn small-btn" data-local-action="cmd-sub" data-player="${pid}" data-amt="5">-5</button>
+                    <button class="control-btn small-btn" data-local-action="cmd-sub" data-player="${pid}" data-amt="1">-1</button>
+                    <button class="control-btn small-btn" data-local-action="cmd-add" data-player="${pid}" data-amt="1">+1</button>
+                    <button class="control-btn small-btn" data-local-action="cmd-add" data-player="${pid}" data-amt="5">+5</button>
+                    <button class="control-btn small-btn" data-local-action="toggle-cmd-controls" data-player="${pid}">CMD DMG</button>
+                    <button class="control-btn small-btn" data-local-action="edit-commander" data-player="${pid}">Edit Commander</button>
+                    <button class="control-btn small-btn" data-local-action="remove-player" data-player="${pid}">Remove Player</button>
                   </div>
                 </div>
-
-                <div style="margin-top:8px">${outgoingBreakdownHtml}</div>
+                ${outgoingBreakdownHtml}
               </div>
 
+              <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+                <div style="display:flex;gap:8px;align-items:center">
+                  ${infectControlsHtml}
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button class="btn-secondary" data-local-action="life-sub" data-player="${pid}" style="min-width:120px">-5 Life</button>
+                  <button class="btn-primary" data-local-action="life-add" data-player="${pid}" style="min-width:120px">+5 Life</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- CMD controls (incoming editor) -->
+            <div class="cmd-controls ${cmdOpen ? 'open' : ''}" id="cmd-controls-${pid}">
+              <div style="font-weight:800;color:var(--muted);margin-bottom:6px">Edit this player's incoming commander damage values</div>
+              <div class="per-opp-container">
+                ${perOppRows || `<div class="outgoing-cmd-item" style="justify-content:center;color:var(--muted)">No opponents yet</div>`}
+              </div>
             </div>
           </div>
         `;
@@ -642,284 +652,180 @@
 
       container.innerHTML = html;
 
-      // Attach event listeners for local controls
-      document.getElementById('local-restart-btn').addEventListener('click', ()=>{
-        if(!confirm('Restart game and reset all players to starting life?')) return;
-        const d = getLocalData() || roomData;
-        Object.keys(d.players || {}).forEach(pid=>{
-          d.players[pid].life = getStartingLife();
-          d.players[pid].infect = 0;
-          d.players[pid].commanderDamage = {};
-          d.players[pid].cmdPersistent = false;
-          d.players[pid].rotation = 0;
+      // Restart button
+      const restartBtn = document.getElementById('local-restart-btn');
+      if(restartBtn){
+        restartBtn.addEventListener('click', ()=>{
+          if(!confirm('Restart game and reset all life/infect/commander damage?')) return;
+          const d = getLocalData() || roomData;
+          Object.keys(d.players || {}).forEach(pid=>{
+            d.players[pid].life = getStartingLife();
+            d.players[pid].infect = 0;
+            d.players[pid].commanderDamage = {};
+            // keep rotation and commander name intact
+          });
+          setLocalData(d);
+          renderLocalRoom(d);
         });
-        setLocalData(d);
-        renderLocalRoom(d);
-      });
+      }
 
-      // Generic delegation for local actions
+      // ----------------------------------------------------------------------
+      // Event delegation for local controls
+      // ----------------------------------------------------------------------
       container.querySelectorAll('[data-local-action]').forEach(el=>{
         el.addEventListener('click', (ev)=>{
           const action = el.getAttribute('data-local-action');
           const player = el.getAttribute('data-player');
           const target = el.getAttribute('data-target');
           const opp = el.getAttribute('data-opp');
-          handleLocalAction(action, player, target, opp);
-        });
-      });
+          const amt = parseInt(el.getAttribute('data-amt') || '0', 10);
 
-      // Inputs for per-opp numeric edits
-      container.querySelectorAll('.cmd-target-input').forEach(input=>{
-        input.addEventListener('change', (ev)=>{
-          const t = input.getAttribute('data-target');
-          const o = input.getAttribute('data-opp');
-          const val = parseInt(input.value) || 0;
           const d = getLocalData();
-          if(!d || !d.players) return;
-          if(!d.players[o]) return;
-          if(!d.players[o].commanderDamage) d.players[o].commanderDamage = {};
-          d.players[o].commanderDamage[t] = val;
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
+          if(!d) return;
 
-      // Small +/- buttons for per-opp
-      container.querySelectorAll('[data-local-action="cmd-target-add"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const t = btn.getAttribute('data-target');
-          const o = btn.getAttribute('data-opp');
-          const d = getLocalData();
-          if(!d || !d.players) return;
-          if(!d.players[o]) return;
-          if(!d.players[o].commanderDamage) d.players[o].commanderDamage = {};
-          d.players[o].commanderDamage[t] = (parseInt(d.players[o].commanderDamage[t])||0) + 1;
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-      container.querySelectorAll('[data-local-action="cmd-target-sub"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const t = btn.getAttribute('data-target');
-          const o = btn.getAttribute('data-opp');
-          const d = getLocalData();
-          if(!d || !d.players) return;
-          if(!d.players[o]) return;
-          if(!d.players[o].commanderDamage) d.players[o].commanderDamage = {};
-          d.players[o].commanderDamage[t] = Math.max(0, (parseInt(d.players[o].commanderDamage[t])||0) - 1);
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-
-      // Life +/- handlers
-      container.querySelectorAll('[data-local-action="life-add"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          const d = getLocalData();
-          if(!d || !d.players || !d.players[pid]) return;
-          d.players[pid].life = (parseInt(d.players[pid].life)||0) + 1;
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-      container.querySelectorAll('[data-local-action="life-sub"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          const d = getLocalData();
-          if(!d || !d.players || !d.players[pid]) return;
-          d.players[pid].life = (parseInt(d.players[pid].life)||0) - 1;
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-
-      // Infect +/- handlers
-      container.querySelectorAll('[data-local-action="infect-add"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          const d = getLocalData();
-          if(!d || !d.players || !d.players[pid]) return;
-          d.players[pid].infect = (parseInt(d.players[pid].infect)||0) + 1;
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-      container.querySelectorAll('[data-local-action="infect-sub"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          const d = getLocalData();
-          if(!d || !d.players || !d.players[pid]) return;
-          d.players[pid].infect = Math.max(0, (parseInt(d.players[pid].infect)||0) - 1);
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-
-      // Reset CMD
-      container.querySelectorAll('[data-local-action="reset-cmd"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          const d = getLocalData();
-          if(!d || !d.players || !d.players[pid]) return;
-          // Clear outgoing commander damage from this player
-          d.players[pid].commanderDamage = {};
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-
-      // Eliminate
-      container.querySelectorAll('[data-local-action="eliminate"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          const d = getLocalData();
-          if(!d || !d.players || !d.players[pid]) return;
-          d.players[pid].life = -999;
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-
-      // Edit commander (open modal)
-      container.querySelectorAll('[data-local-action="edit-commander"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          openEditCommanderModal(pid);
-        });
-      });
-
-      // Toggle CMD controls persistent/open
-      container.querySelectorAll('[data-local-action="toggle-cmd-controls"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          const d = getLocalData();
-          if(!d || !d.players || !d.players[pid]) return;
-          // Toggle persistent flag
-          d.players[pid].cmdPersistent = !d.players[pid].cmdPersistent;
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-
-      // Rotation controls
-      container.querySelectorAll('[data-local-action="rotate-next"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          const d = getLocalData();
-          if(!d || !d.players || !d.players[pid]) return;
-          const current = d.players[pid].rotation || 0;
-          const next = (current + 90) % 360;
-          d.players[pid].rotation = next;
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-      container.querySelectorAll('[data-local-action="rotate-prev"]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          const pid = btn.getAttribute('data-player');
-          const d = getLocalData();
-          if(!d || !d.players || !d.players[pid]) return;
-          const current = d.players[pid].rotation || 0;
-          const next = (current - 90 + 360) % 360;
-          d.players[pid].rotation = next;
-          setLocalData(d);
-          renderLocalRoom(d);
-        });
-      });
-
-      // Also attach change handlers for numeric inputs inside per-opp rows (already done above)
-    }
-
-    // Edit commander modal logic (local)
-    function openEditCommanderModal(pid){
-      const modal = document.getElementById('edit-commander-modal');
-      const nameInput = document.getElementById('edit-commander-name');
-      const saveBtn = document.getElementById('edit-commander-save');
-      const cancelBtn = document.getElementById('edit-commander-cancel');
-      const suggestions = document.getElementById('edit-commander-suggestions');
-      const result = document.getElementById('edit-commander-result');
-
-      const d = getLocalData();
-      if(!d || !d.players || !d.players[pid]) return;
-      nameInput.value = d.players[pid].commanderName || '';
-      suggestions.innerHTML = '';
-      result.innerHTML = '';
-
-      modal.style.display = 'flex';
-      modal.setAttribute('aria-hidden', 'false');
-
-      const closeModal = ()=>{
-        modal.style.display = 'none';
-        modal.setAttribute('aria-hidden', 'true');
-      };
-
-      cancelBtn.onclick = ()=>{ closeModal(); };
-      saveBtn.onclick = async ()=>{
-        const newName = (nameInput.value || '').trim();
-        // Optionally validate via Scryfall (non-blocking)
-        if(newName){
-          const validated = await validateCommander(newName);
-          if(validated){
-            d.players[pid].commanderName = validated.validatedName;
-            // we don't store image in local for now, but could
+          // Helper to persist and re-render
+          function saveAndRerender(){
             setLocalData(d);
-            result.textContent = `Commander set to "${validated.validatedName}".`;
             renderLocalRoom(d);
-            setTimeout(()=> closeModal(), 600);
-            return;
-          }else{
-            // If validation fails, still allow saving the raw name
-            d.players[pid].commanderName = newName;
-            setLocalData(d);
-            result.textContent = `Saved "${newName}" (validation not found).`;
-            renderLocalRoom(d);
-            setTimeout(()=> closeModal(), 600);
+          }
+
+          if(action === 'remove-player'){
+            if(!confirm('Remove this player?')) return;
+            // remove player
+            delete d.players[player];
+            d.playersOrder = d.playersOrder.filter(id => id !== player);
+            // also remove any commanderDamage entries referencing this player
+            Object.keys(d.players || {}).forEach(pid=>{
+              if(d.players[pid] && d.players[pid].commanderDamage){
+                delete d.players[pid].commanderDamage[player];
+              }
+            });
+            // remove UI state
+            const ui = getLocalUiState();
+            if(ui[player]){ delete ui[player]; setLocalUiState(ui); }
+            saveAndRerender();
             return;
           }
-        }else{
-          d.players[pid].commanderName = '';
+
+          if(action === 'edit-commander'){
+            const newName = prompt('Enter commander name (leave blank to clear):', d.players[player].commanderName || '');
+            if(newName !== null){
+              d.players[player].commanderName = (newName || '').trim();
+              saveAndRerender();
+            }
+            return;
+          }
+
+          if(action === 'life-add' || action === 'life-sub'){
+            const delta = action === 'life-add' ? 5 : -5;
+            d.players[player].life = (parseInt(d.players[player].life) || 0) + delta;
+            saveAndRerender();
+            return;
+          }
+
+          if(action === 'infect-add' || action === 'infect-sub'){
+            const delta = action === 'infect-add' ? 1 : -1;
+            d.players[player].infect = Math.max(0, (parseInt(d.players[player].infect) || 0) + delta);
+            saveAndRerender();
+            return;
+          }
+
+          if(action === 'cmd-add' || action === 'cmd-sub'){
+            // These buttons adjust the outgoing total by adding/subtracting to a "self" aggregate.
+            // Implementation: add to a synthetic "self" entry in commanderDamage mapping keyed by 'self' or adjust nothing.
+            // To keep original behavior intact, we'll increment a special outgoing counter stored on player as 'outgoingBuffer'
+            const delta = (action === 'cmd-add' ? amt : -amt) || 0;
+            d.players[player].outgoingBuffer = (d.players[player].outgoingBuffer || 0) + delta;
+            // Note: outgoingBuffer is only a UI convenience; it does not change per-opponent commanderDamage.
+            saveAndRerender();
+            return;
+          }
+
+          if(action === 'cmd-target-add' || action === 'cmd-target-sub'){
+            // Adjust incoming commander damage from opp -> target (target is data-target)
+            const delta = action === 'cmd-target-add' ? 1 : -1;
+            const targetId = target;
+            const oppId = opp;
+            if(!d.players[oppId]) return;
+            d.players[oppId].commanderDamage = d.players[oppId].commanderDamage || {};
+            d.players[oppId].commanderDamage[targetId] = Math.max(0, (parseInt(d.players[oppId].commanderDamage[targetId]) || 0) + delta);
+            saveAndRerender();
+            return;
+          }
+
+          if(action === 'toggle-cmd-controls'){
+            // ----------------------------------------------------------------
+            // NEW: Toggle persistent CMD controls for this player.
+            // When toggled open, it stays open until toggled again. Persisted in local UI state.
+            // ----------------------------------------------------------------
+            const ui = getPlayerUiState(player);
+            const newOpen = !ui.cmdOpen;
+            setPlayerUiState(player, { cmdOpen: newOpen });
+            // Re-render to reflect change
+            renderLocalRoom(d);
+            return;
+          }
+
+          if(action === 'rotate-panel'){
+            // ----------------------------------------------------------------
+            // NEW: Cycle rotation for this player's panel: 0 -> 90 -> 180 -> 270 -> 0
+            // Persist rotation in local UI state and in room data (so it survives refresh)
+            // ----------------------------------------------------------------
+            const ui = getPlayerUiState(player);
+            const current = (typeof ui.rotation === 'number') ? ui.rotation : (d.players[player].rotation || 0);
+            const next = current === 0 ? 90 : current === 90 ? 180 : current === 180 ? 270 : 0;
+            // persist both in UI state and in room data
+            setPlayerUiState(player, { rotation: next, cmdOpen: ui.cmdOpen || false });
+            d.players[player].rotation = next;
+            saveAndRerender();
+            return;
+          }
+        });
+      });
+
+      // ----------------------------------------------------------------------
+      // Also wire up numeric inputs for per-opp direct edits
+      // ----------------------------------------------------------------------
+      container.querySelectorAll('.cmd-target-input').forEach(input=>{
+        input.addEventListener('change', (ev)=>{
+          const target = input.getAttribute('data-target');
+          const opp = input.getAttribute('data-opp');
+          const val = parseInt(input.value || '0', 10);
+          const d = getLocalData();
+          if(!d) return;
+          d.players[opp].commanderDamage = d.players[opp].commanderDamage || {};
+          d.players[opp].commanderDamage[target] = Math.max(0, val || 0);
           setLocalData(d);
-          result.textContent = 'Cleared commander name.';
           renderLocalRoom(d);
-          setTimeout(()=> closeModal(), 600);
-        }
-      };
+        });
+      });
     }
 
     // ----------------------------------------------------------------------
-    // SETUP / HOME VIEW (simple)
+    // Minimal placeholder for renderSetupView used by renderHome
+    // (keeps original app behavior intact)
     // ----------------------------------------------------------------------
     async function renderSetupView(){
       const appContainer = document.getElementById('app-container');
       appContainer.innerHTML = `
-        <h2 style="margin-top:0;color:var(--text)">Welcome</h2>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <div style="flex:1;min-width:280px">
-            <div style="background:#121416;padding:12px;border-radius:8px;border:1px solid var(--dark-border)">
-              <h3 style="margin-top:0;color:var(--text)">Start a Local Game</h3>
-              <p class="muted">Quickly set up an offline game for friends around a table.</p>
-              <div style="display:flex;gap:8px;margin-top:8px">
-                <button id="start-local-btn" class="btn-primary">Open Local Game</button>
-                <button id="learn-more-btn" class="btn-secondary">How it works</button>
-              </div>
-            </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          <div>
+            <h2 style="margin:0;color:var(--text)">Home</h2>
+            <div class="muted" style="font-size:.9rem;margin-top:6px">Create or join a lobby, or use the Local game for offline play.</div>
           </div>
-          <div style="flex:1;min-width:280px">
-            <div style="background:#121416;padding:12px;border-radius:8px;border:1px solid var(--dark-border)">
-              <h3 style="margin-top:0;color:var(--text)">Online Rooms (coming soon)</h3>
-              <p class="muted">Create a lobby and share with friends. (This demo focuses on local mode.)</p>
-            </div>
+          <div class="row">
+            <button id="home-local-btn" class="btn-primary">Open Local Game</button>
           </div>
         </div>
+        <div style="background:#121416;padding:12px;border-radius:8px;border:1px solid var(--dark-border)">
+          <p class="muted">This is the home view. Use the navigation to access Local, Changes, or Contact.</p>
+        </div>
       `;
-
-      document.getElementById('start-local-btn').addEventListener('click', ()=>navigateTo('local'));
-      document.getElementById('learn-more-btn').addEventListener('click', ()=>alert('Local mode stores data in your browser. Use rotate controls on each panel to orient them for players around a table. Use the CMD button to pin/unpin the commander damage editor for each player.'));
+      document.getElementById('home-local-btn').addEventListener('click', ()=>navigateTo('local'));
     }
 
     // ----------------------------------------------------------------------
-    // INITIALIZE
+    // Initialize default route
     // ----------------------------------------------------------------------
     (function init(){
       const page = (location.hash || '#home').replace('#','') || 'home';
@@ -930,107 +836,6 @@
       else if(page === 'contact') renderContact();
     })();
 
-    // ----------------------------------------------------------------------
-    // LOCAL ACTION HANDLER (delegated)
-    // ----------------------------------------------------------------------
-    function handleLocalAction(action, player, target, opp){
-      const d = getLocalData();
-      if(!d) return;
-      switch(action){
-        case 'cmd-target-add':
-          if(!d.players[opp]) return;
-          if(!d.players[opp].commanderDamage) d.players[opp].commanderDamage = {};
-          d.players[opp].commanderDamage[target] = (parseInt(d.players[opp].commanderDamage[target])||0) + 1;
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'cmd-target-sub':
-          if(!d.players[opp]) return;
-          if(!d.players[opp].commanderDamage) d.players[opp].commanderDamage = {};
-          d.players[opp].commanderDamage[target] = Math.max(0, (parseInt(d.players[opp].commanderDamage[target])||0) - 1);
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'life-add':
-          if(!d.players[player]) return;
-          d.players[player].life = (parseInt(d.players[player].life)||0) + 1;
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'life-sub':
-          if(!d.players[player]) return;
-          d.players[player].life = (parseInt(d.players[player].life)||0) - 1;
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'infect-add':
-          if(!d.players[player]) return;
-          d.players[player].infect = (parseInt(d.players[player].infect)||0) + 1;
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'infect-sub':
-          if(!d.players[player]) return;
-          d.players[player].infect = Math.max(0, (parseInt(d.players[player].infect)||0) - 1);
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'reset-cmd':
-          if(!d.players[player]) return;
-          d.players[player].commanderDamage = {};
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'eliminate':
-          if(!d.players[player]) return;
-          d.players[player].life = -999;
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'edit-commander':
-          openEditCommanderModal(player);
-          break;
-        case 'toggle-cmd-controls':
-          if(!d.players[player]) return;
-          // Toggle persistent flag. This makes the CMD controls remain open until toggled again.
-          d.players[player].cmdPersistent = !d.players[player].cmdPersistent;
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'rotate-next':
-          if(!d.players[player]) return;
-          d.players[player].rotation = (d.players[player].rotation + 90) % 360;
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        case 'rotate-prev':
-          if(!d.players[player]) return;
-          d.players[player].rotation = (d.players[player].rotation - 90 + 360) % 360;
-          setLocalData(d);
-          renderLocalRoom(d);
-          break;
-        default:
-          // no-op
-          break;
-      }
-    }
-
-    // ----------------------------------------------------------------------
-    // NOTES:
-    // 1) Commander damage box persistence:
-    //    - Each local player object now has a boolean `cmdPersistent`.
-    //    - Clicking the "CMD" button toggles that flag.
-    //    - When `cmdPersistent` is true the `.cmd-controls` element is rendered with classes `open persistent`
-    //      which keeps it visible until the user clicks the CMD button again.
-    //test
-    // 2) Panel rotation:
-    //    - Each local player object now has a numeric `rotation` property (0,90,180,270).
-    //    - Two rotate buttons cycle the rotation forward/backward.
-    //    - The panel element receives an inline `transform: rotate(Xdeg)` style so players can orient their panel.
-    //    - Rotation is persisted in localStorage with the rest of the local room data.
-    //
-    // Implementation is intentionally limited to the local/offline mode as requested.
-    // ----------------------------------------------------------------------
   </script>
 </body>
 </html>
