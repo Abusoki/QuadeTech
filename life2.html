@@ -336,26 +336,44 @@
             const [rotation, setRotation] = useState(0);
 
             const adjustLife = (amount) => {
-                if (isDead) return;
                 const newLife = life + amount;
-                onUpdate(id, { life: newLife });
-                if (newLife <= 0) onDead(id);
+                
+                // Recalculate dead status dynamically
+                const deadByPoison = poison >= 10;
+                const deadByCmdr = Object.values(commanderDamage).some(dmg => dmg >= 21);
+                const deadByLife = newLife <= 0;
+                
+                onUpdate(id, { 
+                    life: newLife, 
+                    isDead: deadByPoison || deadByCmdr || deadByLife
+                });
             };
 
             const adjustPoison = (amount) => {
-                if (isDead) return;
                 const newPoison = Math.max(0, (poison || 0) + amount);
-                onUpdate(id, { poison: newPoison });
-                if (newPoison >= 10) onDead(id);
+                const deadByPoison = newPoison >= 10;
+                const deadByCmdr = Object.values(commanderDamage).some(dmg => dmg >= 21);
+                const deadByLife = life <= 0;
+
+                onUpdate(id, { 
+                    poison: newPoison,
+                    isDead: deadByPoison || deadByCmdr || deadByLife
+                });
             };
 
             const adjustCmdrDamage = (sourceId, amount) => {
-                if (isDead) return;
                 const current = commanderDamage[sourceId] || 0;
                 const newDmg = Math.max(0, current + amount);
                 const newMap = { ...commanderDamage, [sourceId]: newDmg };
-                onUpdate(id, { commanderDamage: newMap });
-                if (newDmg >= 21) onDead(id);
+                
+                const deadByPoison = poison >= 10;
+                const deadByCmdr = Object.values(newMap).some(dmg => dmg >= 21);
+                const deadByLife = life <= 0;
+
+                onUpdate(id, { 
+                    commanderDamage: newMap,
+                    isDead: deadByPoison || deadByCmdr || deadByLife
+                });
             };
 
             const toggleRotation = () => {
@@ -418,7 +436,7 @@
 
                         <div className="flex flex-col items-center space-y-3 relative">
                             <div className="flex justify-center gap-3">
-                                {[-5, 5].map(amt => (
+                                {[-10, -5, 5, 10].map(amt => (
                                     <button key={amt} onClick={() => adjustLife(amt)} className="px-3 py-1 bg-black/20 hover:bg-black/40 rounded-lg text-white/80 text-xs font-bold backdrop-blur-sm">{amt > 0 ? '+' : ''}{amt}</button>
                                 ))}
                             </div>
@@ -987,12 +1005,20 @@
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.12.0 - Chat & Revert</div>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.13.0 - Life Edit Redux</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Restored Functionality</h3>
+                    <ul className="list-disc pl-4 space-y-2 text-slate-400">
+                        <li><strong className="text-slate-200">Life After Death:</strong> Players can once again edit their life totals even after being marked as dead (to fix calculation errors).</li>
+                        <li><strong className="text-slate-200">Quick Adjust Buttons:</strong> The -10 and +10 life buttons have been restored to the player interface.</li>
+                    </ul>
+                </div>
+                <div className="relative pl-8 border-l-2 border-slate-700">
+                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-700 ring-4 ring-slate-900" />
+                    <div className="mb-1 text-slate-500 font-mono text-sm">v2.12.0</div>
                     <h3 className="text-xl font-bold text-white mb-2">Back to Basics + Chat</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Room Chat:</strong> Added a real-time chat box to multiplayer rooms. Click the message icon in the top right to open.</li>
-                        <li><strong className="text-slate-200">Reverted Changes:</strong> Removed AI Strategy features and returned to the standard Contact page. Removed +/-10 life buttons.</li>
-                        <li><strong className="text-slate-200">Card Database:</strong> The global card search remains available in both the Lobby and active Game Rooms.</li>
+                        <li><strong className="text-slate-200">Room Chat:</strong> Added a real-time chat box to multiplayer rooms.</li>
+                        <li><strong className="text-slate-200">AI Removal:</strong> Removed AI Strategy features.</li>
                     </ul>
                 </div>
             </div>
@@ -1031,6 +1057,8 @@
                 setLocalPlayers(prev => prev.map(p => {
                     if (p.id !== id) return p;
                     const updated = { ...p, ...updates };
+                    
+                    // Auto-calculate death for local play ONLY if life/poison/cmdrDmg was updated
                     if (typeof updates.life !== 'undefined' || typeof updates.poison !== 'undefined' || updates.commanderDamage) {
                         const deadByPoison = updated.poison >= 10;
                         const deadByCmdr = Object.values(updated.commanderDamage || {}).some(dmg => dmg >= 21);
