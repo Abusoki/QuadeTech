@@ -48,6 +48,12 @@
         .winner-glow {
             animation: pulse-gold 2s infinite;
         }
+
+        /* Mobile Scrolling Fixes */
+        .scroll-container {
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+        }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-200 h-[100dvh] overflow-hidden">
@@ -56,7 +62,7 @@
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp, query, orderBy, limit, increment, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc, addDoc, deleteDoc, serverTimestamp, query, orderBy, limit, increment, arrayUnion, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
         const { useState, useEffect, useRef, useMemo } = React;
 
@@ -114,7 +120,8 @@
             Refresh: (p) => <Icon {...p} path={<><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>} />,
             Book: (p) => <Icon {...p} path={<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>} />,
             ChevronLeft: (p) => <Icon {...p} path={<polyline points="15 18 9 12 15 6" />} />,
-            ChevronRight: (p) => <Icon {...p} path={<polyline points="9 18 15 12 9 6" />} />
+            ChevronRight: (p) => <Icon {...p} path={<polyline points="9 18 15 12 9 6" />} />,
+            LogOut: (p) => <Icon {...p} path={<g><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></g>} />
         };
 
         // --- Helpers ---
@@ -174,9 +181,37 @@
             }
         };
 
+        // --- Web Worker Heartbeat Hook ---
+        const useBackgroundHeartbeat = () => {
+            useEffect(() => {
+                const workerScript = `
+                    let intervalId;
+                    self.onmessage = function(e) {
+                        if (e.data === 'start') {
+                            intervalId = setInterval(() => {
+                                self.postMessage('tick');
+                            }, 1000);
+                        } else if (e.data === 'stop') {
+                            clearInterval(intervalId);
+                        }
+                    };
+                `;
+                const blob = new Blob([workerScript], { type: 'application/javascript' });
+                const workerUrl = URL.createObjectURL(blob);
+                const worker = new Worker(workerUrl);
+                worker.onmessage = () => {};
+                worker.postMessage('start');
+                return () => {
+                    worker.postMessage('stop');
+                    worker.terminate();
+                    URL.revokeObjectURL(workerUrl);
+                };
+            }, []);
+        };
+
         // --- Components ---
 
-        // 1. Game Tools Modal
+        // 1. Game Tools Modal (Unchanged)
         const GameToolsModal = ({ players, onClose }) => {
             const [activeTab, setActiveTab] = useState('first'); 
             const [result, setResult] = useState(null);
@@ -273,7 +308,7 @@
             );
         };
 
-        // 2. History Log Modal
+        // 2. History Log Modal (Unchanged)
         const HistoryModal = ({ log = [], onClose }) => (
             <div className="fixed inset-0 bg-black/90 z-[70] flex items-end md:items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
                 <div className="bg-slate-900 w-full max-w-md h-[60vh] rounded-t-2xl md:rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
@@ -297,7 +332,7 @@
             </div>
         );
 
-        // 3. Card Detail View (Modal)
+        // 3. Card Detail View (Modal) (Unchanged)
         const CardDetailModal = ({ card, onClose }) => (
             <div className="fixed inset-0 bg-black/95 z-[60] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
                 <div className="relative max-w-lg w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
@@ -325,7 +360,7 @@
             </div>
         );
 
-        // 4. Unified Card Search
+        // 4. Unified Card Search (Unchanged)
         const CardSearch = ({ onSelect, onClose, mode = 'commander' }) => {
             const [query, setQuery] = useState('');
             const [results, setResults] = useState([]);
@@ -413,7 +448,7 @@
             );
         };
 
-        // 5. Stats Page
+        // 5. Stats Page (Unchanged)
         const StatsPage = ({ user }) => {
             const [stats, setStats] = useState({ topCommanders: [], topCommander: null, deathStats: null });
             const [loading, setLoading] = useState(true);
@@ -421,7 +456,6 @@
             useEffect(() => {
                 if (!user) return;
                 
-                // Commander Stats
                 const commandersRef = collection(db, 'artifacts', appId, 'public', 'data', 'commander_stats');
                 const unsubscribeCommanders = onSnapshot(commandersRef, (snapshot) => {
                     const commanders = [];
@@ -435,7 +469,6 @@
                     }));
                 });
 
-                // Global Death Stats
                 const deathStatsRef = doc(db, 'artifacts', appId, 'public', 'data', 'global_stats', 'deaths');
                 const unsubscribeDeaths = onSnapshot(deathStatsRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -450,13 +483,12 @@
             if (loading) return <div className="flex items-center justify-center h-full text-slate-400">Loading Stats...</div>;
 
             return (
-                <div className="p-4 md:p-8 max-w-6xl mx-auto h-full overflow-y-auto">
+                <div className="p-4 md:p-8 max-w-6xl mx-auto h-full overflow-y-auto scroll-container">
                     <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
                         <Icons.BarChart2 className="w-8 h-8 text-purple-500" />
                         Meta Statistics
                     </h1>
 
-                    {/* Death Stats Row */}
                     {stats.deathStats && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                             <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 flex flex-col items-center">
@@ -542,7 +574,7 @@
             );
         };
 
-        // 6. Player Card
+        // 6. Player Card (Unchanged)
         const PlayerCard = ({ id, name, life, commander, color, poison = 0, commanderDamage = {}, milled = false, onUpdate, onDead, isDead, isLocal, isWinner, players = [], onLog }) => {
             const [showCmdrSearch, setShowCmdrSearch] = useState(false);
             const [showTools, setShowTools] = useState(false);
@@ -684,7 +716,7 @@
             );
         };
 
-        // 7. Contact Page (Same as before)
+        // 7. Contact Page (Unchanged)
         const ContactPage = () => (
              <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
                 <div className="bg-slate-900/50 backdrop-blur-lg p-8 rounded-2xl border border-slate-700 shadow-2xl max-w-md w-full">
@@ -696,7 +728,7 @@
             </div>
         );
 
-        // 8. Online Room
+        // 8. Online Room (Refactored for Stability)
         const OnlineRoom = ({ user, onLeave }) => {
             const [joinedRoom, setJoinedRoom] = useState(null);
             const [error, setError] = useState('');
@@ -705,7 +737,9 @@
             const [showCardSearch, setShowCardSearch] = useState(false);
             const [viewingCard, setViewingCard] = useState(null);
             
-            // Chat State
+            const [confirmReset, setConfirmReset] = useState(false);
+            const [confirmClose, setConfirmClose] = useState(false);
+            
             const [showChat, setShowChat] = useState(false);
             const [chatInput, setChatInput] = useState('');
             const [messages, setMessages] = useState([]);
@@ -713,7 +747,6 @@
             const lastMsgCountRef = useRef(0);
             const chatEndRef = useRef(null);
 
-            // Tools & History State for Online
             const [showToolsModal, setShowToolsModal] = useState(false);
             const [showHistoryModal, setShowHistoryModal] = useState(false);
             const [roomLog, setRoomLog] = useState([]);
@@ -725,6 +758,12 @@
             const [joinPassword, setJoinPassword] = useState('');
             const [selectedRoomId, setSelectedRoomId] = useState(null);
             
+            // --- FIX 3: Ref to hold latest player state for Heartbeat closure ---
+            const playersRef = useRef([]); 
+            
+            // --- FIX 4: Ref to prevent "Click Twice" race condition ---
+            const isJoiningRef = useRef(false);
+
             const TIMEOUT_INACTIVITY = 20 * 60 * 1000;
             const TIMEOUT_DURATION = 12 * 60 * 60 * 1000;
 
@@ -732,7 +771,37 @@
             const updatePlayerName = (name) => { setPlayerName(name); localStorage.setItem('mtg_username', name); };
             const getMillis = (ts) => { if (!ts) return Date.now(); return ts.toMillis ? ts.toMillis() : Date.now(); };
 
-            // Room List (Lobby)
+            // Wake Lock
+            useEffect(() => {
+                let wakeLock = null;
+                const requestWakeLock = async () => {
+                    try {
+                        if ('wakeLock' in navigator) {
+                            wakeLock = await navigator.wakeLock.request('screen');
+                        }
+                    } catch (err) {
+                        console.log(`${err.name}, ${err.message}`);
+                    }
+                };
+                if (joinedRoom) {
+                    requestWakeLock();
+                    document.addEventListener('visibilitychange', handleVisibilityChange);
+                }
+                async function handleVisibilityChange() {
+                    if (wakeLock !== null && document.visibilityState === 'visible') {
+                        requestWakeLock();
+                    }
+                }
+                return () => {
+                    if (wakeLock !== null) {
+                        wakeLock.release();
+                        wakeLock = null;
+                    }
+                    document.removeEventListener('visibilitychange', handleVisibilityChange);
+                };
+            }, [joinedRoom]);
+
+            // Room List
             useEffect(() => {
                 if(joinedRoom) return; 
                 const params = new URLSearchParams(window.location.search);
@@ -756,31 +825,80 @@
                 return () => unsub();
             }, [joinedRoom]);
 
+            // --- FIX 1: Add Player Logic moved here ---
+            const joinRoomLogic = async (roomName, password = null) => {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomName);
+                
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const roomDoc = await transaction.get(roomRef);
+                        if (!roomDoc.exists()) { throw new Error("Room does not exist."); }
+                        
+                        const data = roomDoc.data();
+                        if (data.password && data.password !== password) { throw new Error("Incorrect Password"); }
+                        
+                        const currentPlayers = data.players || [];
+                        const existingPlayer = currentPlayers.find(p => p.id === user.uid);
+                        
+                        if (!existingPlayer) {
+                            const newPlayer = { 
+                                id: user.uid, 
+                                name: playerName || `Player ${currentPlayers.length + 1}`, 
+                                life: 40, 
+                                commander: null, 
+                                isDead: false, 
+                                poison: 0, 
+                                milled: false, 
+                                commanderDamage: {},
+                                lastHeartbeat: Date.now() 
+                            };
+                            transaction.update(roomRef, { 
+                                players: [...currentPlayers, newPlayer],
+                                lastActivity: serverTimestamp() 
+                            });
+                        }
+                    });
+                    // Mark as joining to prevent race condition kick
+                    isJoiningRef.current = true;
+                    setJoinedRoom(roomName);
+                } catch (e) {
+                    setError(e.message);
+                    isJoiningRef.current = false;
+                }
+            };
+
             const createRoom = async () => {
                 if (!hostName || !playerName) { setError("Room Name and Player Name are required."); return; }
                 if (!user) { setError("Authenticating..."); return; }
                 try {
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', hostName);
                     const playerData = { 
-                        id: user.uid, name: playerName, life: 40, commander: null, 
-                        isDead: false, poison: 0, commanderDamage: {}, milled: false, lastActive: Date.now() 
+                        id: user.uid, 
+                        name: playerName, 
+                        life: 40, 
+                        commander: null, 
+                        isDead: false, 
+                        poison: 0, 
+                        commanderDamage: {}, 
+                        milled: false, 
+                        lastActive: Date.now(),
+                        lastHeartbeat: Date.now() 
                     };
                     await setDoc(roomRef, { 
                         name: hostName, password: hostPassword, createdAt: serverTimestamp(),
                         lastActivity: serverTimestamp(), players: [playerData], log: [], messages: [] 
                     });
                     if (playerData.commander && hostName !== "Test") updateCommanderStat(playerData.commander);
+                    isJoiningRef.current = true;
                     setJoinedRoom(hostName);
-                } catch (err) { setError(err.message); }
+                } catch (err) { setError(err.message); isJoiningRef.current = false; }
             };
 
-            const joinRoom = async () => {
+            const joinRoom = () => {
                 if (!selectedRoomId && !hostName) { setError("Select a room."); return; }
                 const rName = selectedRoomId || hostName;
                 if (!playerName) { setError("Enter Display Name."); return; }
-                const roomData = rooms.find(r => r.id === rName);
-                if (roomData && roomData.password && roomData.password !== joinPassword) { setError("Incorrect Password"); return; }
-                setJoinedRoom(rName);
+                joinRoomLogic(rName, joinPassword);
             };
 
             const copyRoomLink = () => {
@@ -797,28 +915,22 @@
 
             const closeRoom = async () => {
                 if (!joinedRoom) return;
-                
-                // --- RECORD DEATH STATS BEFORE CLOSING ---
-                await recordDeathStats(players);
-                // -----------------------------------------
-
-                if (confirm("Close room? It will be deleted.")) {
-                    try {
-                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom));
-                        setJoinedRoom(null);
-                    } catch (e) { setError(e.message); }
-                }
+                await recordDeathStats(playersRef.current);
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom));
+                    setJoinedRoom(null);
+                    setConfirmClose(false);
+                } catch (e) { setError(e.message); }
             };
             
             const resetGame = async () => {
                 if (!joinedRoom) return;
-                if (confirm("Restart game? All life totals and counters will be reset.")) {
-                    try {
-                        const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
-                        const resetPlayers = players.map(p => ({ ...p, life: 40, poison: 0, milled: false, commanderDamage: {}, isDead: false }));
-                        await updateDoc(roomRef, { players: resetPlayers, log: [], messages: arrayUnion({sender: "System", text: "Game has been reset.", timestamp: Date.now()}) });
-                    } catch(e) { setError(e.message); }
-                }
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
+                    const resetPlayers = playersRef.current.map(p => ({ ...p, life: 40, poison: 0, milled: false, commanderDamage: {}, isDead: false }));
+                    await updateDoc(roomRef, { players: resetPlayers, log: [], messages: arrayUnion({sender: "System", text: "Game has been reset.", timestamp: Date.now()}) });
+                    setConfirmReset(false);
+                } catch(e) { setError(e.message); }
             };
 
             const sendMessage = async () => {
@@ -835,33 +947,71 @@
                 await updateDoc(roomRef, { log: arrayUnion({ timestamp: Date.now(), message: entry }) });
             };
 
+            const handleLeaveRoom = async () => {
+                if (!joinedRoom || !user) return;
+                try {
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
+                    // Use ref to get latest state for leaving logic
+                    const currentList = playersRef.current;
+                    const remainingPlayers = currentList.filter(p => p.id !== user.uid);
+                    
+                    if (remainingPlayers.length === 0) {
+                        await deleteDoc(roomRef);
+                    } else {
+                        await updateDoc(roomRef, { players: remainingPlayers });
+                    }
+                    setJoinedRoom(null);
+                    onLeave();
+                } catch (e) {
+                    console.error("Error leaving room:", e);
+                    setJoinedRoom(null);
+                    onLeave();
+                }
+            };
+
+            // --- FIX 1 (Cont): Listener ONLY listens ---
             useEffect(() => {
                 if (!joinedRoom || !user) return;
                 const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
                 const unsubscribe = onSnapshot(roomRef, (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
+                        
+                        // Timeout checks
                         const now = Date.now();
                         const created = getMillis(data.createdAt);
                         const lastActive = getMillis(data.lastActivity);
                         if (now - lastActive > TIMEOUT_INACTIVITY) { setJoinedRoom(null); setError("Room closed (inactivity)."); return; }
                         if (now - created > TIMEOUT_DURATION) { setJoinedRoom(null); setError("Room closed (12h limit)."); return; }
 
+                        // Messages
                         const msgs = data.messages || [];
                         setMessages(msgs);
                         if (!showChat && msgs.length > lastMsgCountRef.current) { setUnreadCount(prev => prev + (msgs.length - lastMsgCountRef.current)); }
                         lastMsgCountRef.current = msgs.length;
 
+                        // Log
                         setRoomLog(data.log || []);
 
+                        // Players
                         let currentPlayers = data.players || [];
                         const amIIn = currentPlayers.find(p => p.id === user.uid);
+                        
                         if (!amIIn) {
-                            if (data.password && data.password !== joinPassword && !selectedRoomId) { setError("Locked."); setJoinedRoom(null); return; }
-                            const newPlayer = { id: user.uid, name: playerName || `Player ${currentPlayers.length + 1}`, life: 40, commander: null, isDead: false, poison: 0, milled: false, commanderDamage: {} };
-                            updateDoc(roomRef, { players: [...currentPlayers, newPlayer], lastActivity: serverTimestamp() });
+                            // FIX: Check if we are currently in the process of joining
+                            if (isJoiningRef.current) {
+                                // Ignore this snapshot, wait for the transaction to propagate
+                                return;
+                            }
+                            
+                            // If I'm not in the list and not joining, I was kicked.
+                            setJoinedRoom(null);
+                            setError("You have left the room.");
                         } else {
+                            // We are present, clear the joining flag
+                            isJoiningRef.current = false;
                             setPlayers(currentPlayers);
+                            playersRef.current = currentPlayers; // Update Ref for heartbeat
                         }
                     } else {
                         setError('Room does not exist!'); setJoinedRoom(null);
@@ -880,17 +1030,59 @@
             const updateSelf = async (updates) => {
                 if (!joinedRoom) return;
                 const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
-                const newPlayers = players.map(p => p.id === user.uid ? { ...p, ...updates } : p);
+                
+                // --- FIX 3: Use Ref to avoid stale closure state ---
+                // We must use the very latest player list from the Ref to avoid overwriting recent changes from other sources
+                // or our own recent changes if state hasn't flushed.
+                const currentList = playersRef.current;
+                const newPlayers = currentList.map(p => p.id === user.uid ? { ...p, ...updates } : p);
+                
+                // Optimistic update for local responsiveness
+                setPlayers(newPlayers);
+                playersRef.current = newPlayers;
+
                 await updateDoc(roomRef, { players: newPlayers, lastActivity: serverTimestamp() });
                 if (updates.commander && joinedRoom !== "Test") updateCommanderStat(updates.commander);
             };
 
-            if (joinedRoom) {
-                const isHost = players.length > 0 && players[0].id === user.uid;
+            const isHost = players.length > 0 && players[0].id === user.uid;
 
+            // Heartbeat
+            useEffect(() => {
+                if (!joinedRoom) return;
+                const interval = setInterval(() => {
+                    // Uses the function which now uses the Ref, so it's always fresh
+                    updateSelf({ lastHeartbeat: Date.now() });
+                }, 5000); 
+                return () => clearInterval(interval);
+            }, [joinedRoom]); // Only restart if room changes
+
+            // Reaper
+            useEffect(() => {
+                if (!joinedRoom || !isHost) return;
+                const interval = setInterval(() => {
+                    const now = Date.now();
+                    const currentList = playersRef.current;
+                    const validPlayers = currentList.filter(p => {
+                        const lastBeat = p.lastHeartbeat || now; 
+                        return (now - lastBeat) < 15000; 
+                    });
+
+                    if (validPlayers.length !== currentList.length) {
+                        const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
+                        if (validPlayers.length === 0) {
+                            deleteDoc(roomRef);
+                        } else {
+                            updateDoc(roomRef, { players: validPlayers });
+                        }
+                    }
+                }, 10000);
+                return () => clearInterval(interval);
+            }, [joinedRoom, isHost]); // Depend on isHost to start/stop reaper
+
+            if (joinedRoom) {
                 return (
                     <div className="h-full flex flex-col relative">
-                         {/* Top Right Controls (Absolute) */}
                          <div className="absolute top-4 right-4 md:right-8 z-30 flex items-center gap-2">
                              <button onClick={() => setShowHistoryModal(true)} className="bg-slate-800 hover:bg-slate-700 text-white p-2 rounded-full shadow-lg border border-slate-600">
                                 <Icons.Clock className="w-5 h-5 text-purple-400" />
@@ -929,22 +1121,29 @@
                                 <div className="flex gap-2">
                                      <button onClick={copyRoomLink} className="hidden md:flex items-center gap-1 text-xs bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-purple-500/50"><Icons.Share className="w-3 h-3" /> Share</button>
                                      {isHost && (
-                                         <>
-                                            <button onClick={closeRoom} className="flex items-center gap-1 text-xs bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-red-500/50">
-                                                <Icons.Trash className="w-3 h-3" /> <span className="hidden md:inline">Close</span>
+                                       <>
+                                            <button 
+                                                onClick={() => { if(confirmClose) { closeRoom(); } else { setConfirmClose(true); setTimeout(() => setConfirmClose(false), 3000); } }} 
+                                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all font-medium border ${confirmClose ? 'bg-red-600 text-white border-red-600 scale-105' : 'bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white border-red-500/50'}`}
+                                            >
+                                                <Icons.Trash className="w-3 h-3" /> <span className="hidden md:inline">{confirmClose ? 'Confirm?' : 'Close'}</span>
                                             </button>
-                                            <button onClick={resetGame} className="flex items-center gap-1 text-xs bg-slate-700 text-slate-300 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-slate-600">
-                                                <Icons.Refresh className="w-3 h-3" /> <span className="hidden md:inline">Reset</span>
+                                            <button 
+                                                onClick={() => { if(confirmReset) { resetGame(); } else { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); } }} 
+                                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all font-medium border ${confirmReset ? 'bg-purple-600 text-white border-purple-600 scale-105' : 'bg-slate-700 text-slate-300 hover:bg-purple-600 hover:text-white border-slate-600'}`}
+                                            >
+                                                <Icons.Refresh className="w-3 h-3" /> <span className="hidden md:inline">{confirmReset ? 'Confirm?' : 'Reset'}</span>
                                             </button>
-                                         </>
+                                       </>
                                      )}
+                                     <button onClick={handleLeaveRoom} className="flex items-center gap-1 text-xs bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-slate-600/50">
+                                        <Icons.LogOut className="w-3 h-3" /> <span className="hidden md:inline">Leave</span>
+                                     </button>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => { setJoinedRoom(null); onLeave(); }} className="text-slate-400 hover:text-white text-sm font-medium">Leave</button>
-                            </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4">
+                        {/* --- FIX 2: Mobile Scrolling Classes --- */}
+                        <div className="flex-1 overflow-y-auto p-4 scroll-container">
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr h-full min-h-[500px]">
                                 {players.map(p => (
                                     <PlayerCard 
@@ -965,7 +1164,7 @@
             }
 
             return (
-                <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto relative">
+                <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto relative scroll-container">
                     <button onClick={() => setShowCardSearch(true)} className="absolute top-4 right-4 md:right-8 bg-slate-800 hover:bg-slate-700 text-white p-2 rounded-full shadow-lg border border-slate-600 transition-colors z-20 flex items-center gap-2 px-4">
                         <Icons.Search className="w-4 h-4 text-purple-400" />
                         <span className="text-sm font-bold">Card Database</span>
@@ -1049,24 +1248,16 @@
 
         // 9. Changelog
         const Changelog = () => (
-            <div className="p-8 max-w-3xl mx-auto text-slate-300 space-y-8 h-full overflow-y-auto">
+            <div className="p-8 max-w-3xl mx-auto text-slate-300 space-y-8 h-full overflow-y-auto scroll-container">
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.21.0 - UI Clean Up</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Online & Wrench</h3>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.23.0 - Ghost Fix</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Multiplayer Stability</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Online Toolbar:</strong> Restored all host functions (Reset Game, Close Room) to the top bar.</li>
-                        <li><strong className="text-slate-200">Local Wrench:</strong> Fixed the positioning of the tools button in local play. It is now correctly centered over the player grid.</li>
-                    </ul>
-                </div>
-                 <div className="relative pl-8 border-l-2 border-slate-700">
-                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-700 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-slate-500 font-mono text-sm">v2.20.0</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Global Tracking</h3>
-                    <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Global Stats:</strong> Tracked death statistics (Poison, Commander, Mill, Standard) now appear on the Stats page.</li>
-                        <li><strong className="text-slate-200">Mill Death:</strong> Added a "Milled Out" toggle in the counters menu.</li>
+                        <li><strong className="text-slate-200">No More Ghosts:</strong> Fixed a major bug where players would persist on screen after leaving.</li>
+                        <li><strong className="text-slate-200">Life Total Fix:</strong> Fixed a race condition where life totals would revert to 40 automatically.</li>
+                        <li><strong className="text-slate-200">Mobile Scrolling:</strong> Improved scrolling performance on Android Chrome.</li>
                     </ul>
                 </div>
             </div>
@@ -1097,8 +1288,20 @@
 
         // --- Main App ---
         function App() {
+            // !!! ADDED FOR BACKGROUND UPDATES !!!
+            useBackgroundHeartbeat();
+
             const [user, setUser] = useState(null);
-            const [view, setView] = useState('local');
+            
+            // --- Check URL for Room Param ---
+            const [view, setView] = useState(() => {
+                if (typeof window !== 'undefined') {
+                    const params = new URLSearchParams(window.location.search);
+                    return params.get('room') ? 'online' : 'local';
+                }
+                return 'local';
+            });
+
             const [isLocalSetup, setIsLocalSetup] = useState(true);
             const [localPlayers, setLocalPlayers] = useState([]);
             const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -1221,7 +1424,8 @@
 
                         {isMenuOpen && <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setIsMenuOpen(false)} />}
 
-                        <main className="flex-1 relative overflow-hidden bg-slate-950">
+                        {/* --- FIX 2: Added min-h-0 to allow proper flex scrolling on Android --- */}
+                        <main className="flex-1 relative overflow-hidden bg-slate-950 flex flex-col min-h-0">
                             {view === 'local' && (
                                 <>
                                     {isLocalSetup ? (
