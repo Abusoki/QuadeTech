@@ -187,7 +187,35 @@
 
         // --- Components ---
 
-        // 1. Unified Card Search (For Commander and General Use)
+        // 1. Card Detail View (Modal)
+        const CardDetailModal = ({ card, onClose }) => (
+            <div className="fixed inset-0 bg-black/95 z-[60] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in" onClick={onClose}>
+                <div className="relative max-w-lg w-full flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                    <img 
+                        src={card.fullImage || card.image} 
+                        alt={card.name} 
+                        className="w-full max-h-[70vh] object-contain rounded-xl shadow-2xl mb-6 border border-slate-700/50" 
+                    />
+                    <div className="text-center text-white bg-slate-900/80 p-4 rounded-xl backdrop-blur-sm border border-slate-700 w-full">
+                        <h2 className="text-2xl font-bold text-purple-300 mb-1">{card.name}</h2>
+                        {card.artist && (
+                            <div className="text-sm text-slate-300 font-medium flex items-center justify-center gap-2">
+                                <span>Art by {card.artist}</span>
+                            </div>
+                        )}
+                        <div className="text-xs text-slate-500 mt-2 tracking-widest uppercase">™ & © Wizards of the Coast</div>
+                    </div>
+                    <button 
+                        onClick={onClose} 
+                        className="absolute -top-12 right-0 md:-right-12 p-2 text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all"
+                    >
+                        <Icons.X className="w-8 h-8" />
+                    </button>
+                </div>
+            </div>
+        );
+
+        // 2. Unified Card Search (For Commander and General Use)
         const CardSearch = ({ onSelect, onClose, mode = 'commander' }) => {
             const [query, setQuery] = useState('');
             const [results, setResults] = useState([]);
@@ -228,7 +256,7 @@
             };
 
             return (
-                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
                         <div className="p-4 border-b border-slate-700 flex items-center gap-3">
                             <Icons.Search className="text-slate-400 w-5 h-5" />
@@ -275,7 +303,7 @@
             );
         };
 
-        // 2. Commander Assistant
+        // 3. Commander Assistant
         const CommanderAssistant = ({ commander, onClose }) => {
             const [strategyText, setStrategyText] = useState(null);
             const [loading, setLoading] = useState(true);
@@ -293,13 +321,11 @@
                     const systemPrompt = "You are a helpful and knowledgeable Magic: The Gathering commander strategy guide assistant. You must use Google Search to ground your answers in current MTG community knowledge.";
 
                     try {
-                        // First attempt with grounding
                         const { text, sources } = await geminiApiCall(userQuery, systemPrompt, true);
                         setStrategyText(text);
                         setSources(sources);
                     } catch (err) {
                         console.warn("Grounding failed or API error, retrying without grounding...", err);
-                        // Fallback: try without grounding
                         try {
                              const { text } = await geminiApiCall(userQuery, systemPrompt, false);
                              setStrategyText(text + "\n\n*(Note: Strategy generated without live web grounding due to API limits)*");
@@ -380,7 +406,7 @@
             );
         };
 
-        // 3. Stats Page
+        // 4. Stats Page
         const StatsPage = ({ user }) => {
             const [stats, setStats] = useState({ topCommanders: [], topCommander: null });
             const [loading, setLoading] = useState(true);
@@ -460,7 +486,6 @@
                                             {stats.topCommander.count} Total Picks
                                         </div>
                                     </div>
-                                    {/* Artist Info for Stats Page */}
                                     {stats.topCommander.artist && (
                                         <div className="absolute bottom-2 right-2 text-[10px] text-white/40 font-medium text-right leading-tight z-10">
                                             <div>Art by {stats.topCommander.artist}</div>
@@ -480,7 +505,7 @@
             );
         };
 
-        // 4. Player Card (Updated with Rotation & Counters)
+        // 5. Player Card (Updated with Rotation & Counters)
         const PlayerCard = ({ id, name, life, commander, color, poison = 0, commanderDamage = {}, onUpdate, onDead, isDead, isLocal, players = [] }) => {
             const [showCmdrSearch, setShowCmdrSearch] = useState(false);
             const [showAssistant, setShowAssistant] = useState(false);
@@ -488,26 +513,52 @@
             const [rotation, setRotation] = useState(0);
 
             const adjustLife = (amount) => {
-                if (isDead) return;
                 const newLife = life + amount;
-                onUpdate(id, { life: newLife });
-                if (newLife <= 0) onDead(id);
+                
+                // Recalculate dead status
+                // If healing back above 0 and not dead by other means (poison/cmdr dmg), they are alive.
+                const deadByPoison = poison >= 10;
+                const deadByCmdr = Object.values(commanderDamage).some(dmg => dmg >= 21);
+                const deadByLife = newLife <= 0;
+                
+                onUpdate(id, { 
+                    life: newLife,
+                    isDead: deadByPoison || deadByCmdr || deadByLife
+                });
             };
 
             const adjustPoison = (amount) => {
-                if (isDead) return;
+                if (isDead && amount < 0) {
+                    // Allow reducing poison to potentially revive
+                } else if (isDead) {
+                    // Don't allow increasing poison if dead
+                    // Actually, for full correction, just allow it.
+                }
+                
                 const newPoison = Math.max(0, (poison || 0) + amount);
-                onUpdate(id, { poison: newPoison });
-                if (newPoison >= 10) onDead(id);
+                const deadByPoison = newPoison >= 10;
+                const deadByCmdr = Object.values(commanderDamage).some(dmg => dmg >= 21);
+                const deadByLife = life <= 0;
+
+                onUpdate(id, { 
+                    poison: newPoison,
+                    isDead: deadByPoison || deadByCmdr || deadByLife
+                });
             };
 
             const adjustCmdrDamage = (sourceId, amount) => {
-                if (isDead) return;
                 const current = commanderDamage[sourceId] || 0;
                 const newDmg = Math.max(0, current + amount);
                 const newMap = { ...commanderDamage, [sourceId]: newDmg };
-                onUpdate(id, { commanderDamage: newMap });
-                if (newDmg >= 21) onDead(id); // Commander damage kill rule
+                
+                const deadByPoison = poison >= 10;
+                const deadByCmdr = Object.values(newMap).some(dmg => dmg >= 21);
+                const deadByLife = life <= 0;
+
+                onUpdate(id, { 
+                    commanderDamage: newMap,
+                    isDead: deadByPoison || deadByCmdr || deadByLife
+                });
             };
 
             const toggleRotation = () => {
@@ -578,7 +629,7 @@
                         {/* Footer Actions */}
                         <div className="flex flex-col items-center space-y-3 relative">
                             <div className="flex justify-center gap-3">
-                                {[-5, 5].map(amt => (
+                                {[-10, -5, 5, 10].map(amt => (
                                     <button key={amt} onClick={() => adjustLife(amt)} className="px-3 py-1 bg-black/20 hover:bg-black/40 rounded-lg text-white/80 text-xs font-bold backdrop-blur-sm">{amt > 0 ? '+' : ''}{amt}</button>
                                 ))}
                             </div>
@@ -666,15 +717,33 @@
             );
         };
 
-        // 6. Online Room (Updated with Timeout & Stat Recording)
+        // 6. Contact Page
+        const ContactPage = () => (
+             <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+                <div className="bg-slate-900/50 backdrop-blur-lg p-8 rounded-2xl border border-slate-700 shadow-2xl max-w-md w-full">
+                    <div className="w-16 h-16 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Icons.Mail className="w-8 h-8 text-purple-500" />
+                    </div>
+                    <h1 className="text-3xl font-bold text-white mb-2">Get in Touch</h1>
+                    <p className="text-slate-400 mb-8">Have feedback or feature requests? We'd love to hear from you.</p>
+                    
+                    <a href="mailto:CardboardBonFire@gmail.com" className="block w-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-medium py-4 px-6 rounded-xl transition-all hover:border-purple-500 group">
+                        <span className="text-xs text-slate-500 uppercase tracking-wider block mb-1 group-hover:text-purple-400">Email Us At</span>
+                        <span className="text-lg break-all">CardboardBonFire@gmail.com</span>
+                    </a>
+                </div>
+            </div>
+        );
+
+        // 7. Online Room
         const OnlineRoom = ({ user, onLeave }) => {
             const [joinedRoom, setJoinedRoom] = useState(null);
             const [error, setError] = useState('');
             const [players, setPlayers] = useState([]);
             const [showCopiedToast, setShowCopiedToast] = useState(false);
-            const [showCardSearch, setShowCardSearch] = useState(false); // NEW State
+            const [showCardSearch, setShowCardSearch] = useState(false);
+            const [viewingCard, setViewingCard] = useState(null); // NEW
             
-            // Lobby State
             const [rooms, setRooms] = useState([]);
             const [playerName, setPlayerName] = useState('');
             const [hostName, setHostName] = useState('');
@@ -682,10 +751,9 @@
             const [joinPassword, setJoinPassword] = useState('');
             const [selectedRoomId, setSelectedRoomId] = useState(null);
             
-            const TIMEOUT_INACTIVITY = 20 * 60 * 1000; // 20 minutes
-            const TIMEOUT_DURATION = 12 * 60 * 60 * 1000; // 12 hours
+            const TIMEOUT_INACTIVITY = 20 * 60 * 1000;
+            const TIMEOUT_DURATION = 12 * 60 * 60 * 1000;
 
-            // --- Display Name Caching ---
             useEffect(() => {
                 const storedName = localStorage.getItem('mtg_username');
                 if (storedName) setPlayerName(storedName);
@@ -701,7 +769,6 @@
                 return ts.toMillis ? ts.toMillis() : Date.now();
             };
 
-            // Fetch Rooms for Lobby & Check Query Params
             useEffect(() => {
                 if(joinedRoom) return; 
                 
@@ -720,7 +787,6 @@
                         const created = getMillis(data.createdAt);
                         const lastActive = getMillis(data.lastActivity);
                         
-                        // Filter out timed out rooms from lobby view
                         if (now - lastActive < TIMEOUT_INACTIVITY && now - created < TIMEOUT_DURATION) {
                             r.push({id: d.id, ...data});
                         }
@@ -815,7 +881,6 @@
                 }
             };
 
-            // In-Game Logic
             useEffect(() => {
                 if (!joinedRoom || !user) return;
                 const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
@@ -892,6 +957,25 @@
 
                 return (
                     <div className="h-full flex flex-col relative">
+                        {/* Card Search & Details */}
+                        <button 
+                            onClick={() => setShowCardSearch(true)}
+                            className="absolute top-4 right-20 md:right-44 bg-slate-800 hover:bg-slate-700 text-white p-2 rounded-full shadow-lg border border-slate-600 transition-colors z-20 flex items-center gap-2 px-4"
+                        >
+                            <Icons.Search className="w-4 h-4 text-purple-400" />
+                            <span className="hidden md:inline text-sm font-bold">Card Database</span>
+                        </button>
+
+                        {showCardSearch && (
+                            <CardSearch 
+                                onSelect={(card) => { setViewingCard(card); setShowCardSearch(false); }} 
+                                onClose={() => setShowCardSearch(false)} 
+                                mode="any" 
+                            />
+                        )}
+
+                        {viewingCard && <CardDetailModal card={viewingCard} onClose={() => setViewingCard(null)} />}
+
                         {/* Copied Toast */}
                         {showCopiedToast && (
                             <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded-full shadow-lg z-50 animate-bounce">
@@ -910,7 +994,7 @@
                                     onClick={copyRoomLink} 
                                     className="flex items-center gap-1 text-xs bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-purple-500/50"
                                 >
-                                    <Icons.Share className="w-3 h-3" /> Share Room
+                                    <Icons.Share className="w-3 h-3" /> Share
                                 </button>
                             </div>
                             <div className="flex items-center gap-3">
@@ -923,7 +1007,7 @@
                                         <Icons.Trash className="w-5 h-5" />
                                     </button>
                                 )}
-                                <button onClick={() => { setJoinedRoom(null); onLeave(); }} className="text-slate-400 hover:text-white text-sm font-medium">Leave Room</button>
+                                <button onClick={() => { setJoinedRoom(null); onLeave(); }} className="text-slate-400 hover:text-white text-sm font-medium">Leave</button>
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-4">
@@ -959,11 +1043,13 @@
 
                     {showCardSearch && (
                         <CardSearch 
-                            onSelect={() => {}} 
+                            onSelect={(card) => { setViewingCard(card); setShowCardSearch(false); }} 
                             onClose={() => setShowCardSearch(false)} 
                             mode="any" 
                         />
                     )}
+
+                    {viewingCard && <CardDetailModal card={viewingCard} onClose={() => setViewingCard(null)} />}
 
                     <div className="max-w-4xl mx-auto w-full space-y-8 mt-12 md:mt-0">
                         
@@ -1106,19 +1192,19 @@
             );
         };
 
-        // 7. Changelog
+        // 8. Changelog
         const Changelog = () => (
             <div className="p-8 max-w-3xl mx-auto text-slate-300 space-y-8 h-full overflow-y-auto">
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.9.0 - QoL & Fixes</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Search, Stats & Stability</h3>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.10.0 - Life & Database</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Resurrection & Research</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Global Card Database:</strong> Access the Scryfall database directly from the lobby to check card details.</li>
-                        <li><strong className="text-slate-200">Name Caching:</strong> Your display name is now saved, so you don't have to re-type it every session.</li>
-                        <li><strong className="text-slate-200">Stats Art Credit:</strong> Artist and copyright information is now displayed on the Global Stats leaderboard.</li>
-                        <li><strong className="text-slate-200">AI Fixes:</strong> Fixed an authentication error with the Strategy Assistant and added a fallback for better reliability.</li>
+                        <li><strong className="text-slate-200">Life Editing:</strong> You can now adjust your life totals even after hitting 0 life to correct mistakes. The dead indicator will update automatically.</li>
+                        <li><strong className="text-slate-200">Quick Adjust:</strong> Added -10 and +10 buttons for faster life updates.</li>
+                        <li><strong className="text-slate-200">In-Match Search:</strong> The Global Card Database is now accessible inside active game rooms.</li>
+                        <li><strong className="text-slate-200">Detail View:</strong> Clicking a card in the global search now brings up a detailed view with art credit.</li>
                     </ul>
                 </div>
             </div>
@@ -1135,6 +1221,8 @@
                 { id: 4, name: 'P4', life: 40, commander: null, color: 'bg-slate-800', poison: 0, commanderDamage: {} }
             ]);
             const [isMenuOpen, setIsMenuOpen] = useState(false);
+            const [showCardSearch, setShowCardSearch] = useState(false);
+            const [viewingCard, setViewingCard] = useState(null);
 
             useEffect(() => {
                 const initAuth = async () => {
@@ -1154,7 +1242,19 @@
             };
 
             const updateLocalPlayer = (id, updates) => {
-                setLocalPlayers(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+                setLocalPlayers(prev => prev.map(p => {
+                    if (p.id !== id) return p;
+                    
+                    const updated = { ...p, ...updates };
+                    // Auto-calculate death for local play
+                    if (typeof updates.life !== 'undefined' || typeof updates.poison !== 'undefined' || updates.commanderDamage) {
+                        const deadByPoison = updated.poison >= 10;
+                        const deadByCmdr = Object.values(updated.commanderDamage || {}).some(dmg => dmg >= 21);
+                        const deadByLife = updated.life <= 0;
+                        updated.isDead = deadByPoison || deadByCmdr || deadByLife;
+                    }
+                    return updated;
+                }));
             };
 
             const NavItem = ({ id, label, icon: Icon }) => (
@@ -1226,6 +1326,7 @@
                                             onDead={(id) => updateLocalPlayer(id, { isDead: true })} 
                                         />
                                     ))}
+                                    {/* Local Game specific: Floating card search button? Or just keep it via commander */}
                                 </div>
                             )}
                             {view === 'online' && <OnlineRoom user={user} onLeave={() => setView('local')} />}
