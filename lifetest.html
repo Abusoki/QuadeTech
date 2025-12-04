@@ -114,8 +114,7 @@
             Refresh: (p) => <Icon {...p} path={<><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>} />,
             Book: (p) => <Icon {...p} path={<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>} />,
             ChevronLeft: (p) => <Icon {...p} path={<polyline points="15 18 9 12 15 6" />} />,
-            ChevronRight: (p) => <Icon {...p} path={<polyline points="9 18 15 12 9 6" />} />,
-            LogOut: (p) => <Icon {...p} path={<g><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></g>} />
+            ChevronRight: (p) => <Icon {...p} path={<polyline points="9 18 15 12 9 6" />} />
         };
 
         // --- Helpers ---
@@ -173,51 +172,6 @@
                     console.error("Error saving death stats:", e);
                 }
             }
-        };
-
-        // --- Web Worker Heartbeat Hook ---
-        // This creates an invisible worker thread that "pokes" the main app
-        // every 1000ms to prevent the browser from putting the tab to sleep.
-        const useBackgroundHeartbeat = () => {
-            useEffect(() => {
-                // 1. Define the worker script as a string
-                const workerScript = `
-                    let intervalId;
-                    self.onmessage = function(e) {
-                        if (e.data === 'start') {
-                            // Tick every 1000ms (1 second)
-                            intervalId = setInterval(() => {
-                                self.postMessage('tick');
-                            }, 1000);
-                        } else if (e.data === 'stop') {
-                            clearInterval(intervalId);
-                        }
-                    };
-                `;
-
-                // 2. Create a Blob URL for the worker
-                const blob = new Blob([workerScript], { type: 'application/javascript' });
-                const workerUrl = URL.createObjectURL(blob);
-                
-                // 3. Initialize the worker
-                const worker = new Worker(workerUrl);
-
-                // 4. Listen for the 'tick'
-                worker.onmessage = () => {
-                    // Merely receiving this message wakes up the Main Thread's event loop.
-                    // This allows pending Firebase WebSocket events to process immediately.
-                };
-
-                // 5. Start the worker
-                worker.postMessage('start');
-
-                // Cleanup
-                return () => {
-                    worker.postMessage('stop');
-                    worker.terminate();
-                    URL.revokeObjectURL(workerUrl);
-                };
-            }, []);
         };
 
         // --- Components ---
@@ -751,10 +705,6 @@
             const [showCardSearch, setShowCardSearch] = useState(false);
             const [viewingCard, setViewingCard] = useState(null);
             
-            // Confirmation States
-            const [confirmReset, setConfirmReset] = useState(false);
-            const [confirmClose, setConfirmClose] = useState(false);
-            
             // Chat State
             const [showChat, setShowChat] = useState(false);
             const [chatInput, setChatInput] = useState('');
@@ -781,40 +731,6 @@
             useEffect(() => { const storedName = localStorage.getItem('mtg_username'); if (storedName) setPlayerName(storedName); }, []);
             const updatePlayerName = (name) => { setPlayerName(name); localStorage.setItem('mtg_username', name); };
             const getMillis = (ts) => { if (!ts) return Date.now(); return ts.toMillis ? ts.toMillis() : Date.now(); };
-
-            // -- WAKE LOCK --
-            // Requests the screen to stay on and active when in a room
-            useEffect(() => {
-                let wakeLock = null;
-                const requestWakeLock = async () => {
-                    try {
-                        if ('wakeLock' in navigator) {
-                            wakeLock = await navigator.wakeLock.request('screen');
-                        }
-                    } catch (err) {
-                        console.log(`${err.name}, ${err.message}`);
-                    }
-                };
-                
-                if (joinedRoom) {
-                    requestWakeLock();
-                    document.addEventListener('visibilitychange', handleVisibilityChange);
-                }
-
-                async function handleVisibilityChange() {
-                    if (wakeLock !== null && document.visibilityState === 'visible') {
-                        requestWakeLock();
-                    }
-                }
-
-                return () => {
-                    if (wakeLock !== null) {
-                        wakeLock.release();
-                        wakeLock = null;
-                    }
-                    document.removeEventListener('visibilitychange', handleVisibilityChange);
-                };
-            }, [joinedRoom]);
 
             // Room List (Lobby)
             useEffect(() => {
@@ -846,16 +762,8 @@
                 try {
                     const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', hostName);
                     const playerData = { 
-                        id: user.uid, 
-                        name: playerName, 
-                        life: 40, 
-                        commander: null, 
-                        isDead: false, 
-                        poison: 0, 
-                        commanderDamage: {}, 
-                        milled: false, 
-                        lastActive: Date.now(),
-                        lastHeartbeat: Date.now() // Initialize heartbeat
+                        id: user.uid, name: playerName, life: 40, commander: null, 
+                        isDead: false, poison: 0, commanderDamage: {}, milled: false, lastActive: Date.now() 
                     };
                     await setDoc(roomRef, { 
                         name: hostName, password: hostPassword, createdAt: serverTimestamp(),
@@ -894,21 +802,23 @@
                 await recordDeathStats(players);
                 // -----------------------------------------
 
-                try {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom));
-                    setJoinedRoom(null);
-                    setConfirmClose(false);
-                } catch (e) { setError(e.message); }
+                if (confirm("Close room? It will be deleted.")) {
+                    try {
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom));
+                        setJoinedRoom(null);
+                    } catch (e) { setError(e.message); }
+                }
             };
             
             const resetGame = async () => {
                 if (!joinedRoom) return;
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
-                    const resetPlayers = players.map(p => ({ ...p, life: 40, poison: 0, milled: false, commanderDamage: {}, isDead: false }));
-                    await updateDoc(roomRef, { players: resetPlayers, log: [], messages: arrayUnion({sender: "System", text: "Game has been reset.", timestamp: Date.now()}) });
-                    setConfirmReset(false);
-                } catch(e) { setError(e.message); }
+                if (confirm("Restart game? All life totals and counters will be reset.")) {
+                    try {
+                        const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
+                        const resetPlayers = players.map(p => ({ ...p, life: 40, poison: 0, milled: false, commanderDamage: {}, isDead: false }));
+                        await updateDoc(roomRef, { players: resetPlayers, log: [], messages: arrayUnion({sender: "System", text: "Game has been reset.", timestamp: Date.now()}) });
+                    } catch(e) { setError(e.message); }
+                }
             };
 
             const sendMessage = async () => {
@@ -923,29 +833,6 @@
                 if (!joinedRoom) return;
                 const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
                 await updateDoc(roomRef, { log: arrayUnion({ timestamp: Date.now(), message: entry }) });
-            };
-
-            // --- Updated Leave Room Logic (Removes Player) ---
-            const handleLeaveRoom = async () => {
-                if (!joinedRoom || !user) return;
-                try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
-                    const remainingPlayers = players.filter(p => p.id !== user.uid);
-                    
-                    if (remainingPlayers.length === 0) {
-                        // Last player leaving, delete room
-                        await deleteDoc(roomRef);
-                    } else {
-                        // Remove self from array (Automatically passes host if we were index 0)
-                        await updateDoc(roomRef, { players: remainingPlayers });
-                    }
-                    setJoinedRoom(null);
-                    onLeave();
-                } catch (e) {
-                    console.error("Error leaving room:", e);
-                    setJoinedRoom(null);
-                    onLeave();
-                }
             };
 
             useEffect(() => {
@@ -971,18 +858,7 @@
                         const amIIn = currentPlayers.find(p => p.id === user.uid);
                         if (!amIIn) {
                             if (data.password && data.password !== joinPassword && !selectedRoomId) { setError("Locked."); setJoinedRoom(null); return; }
-                            // Initial join - add heartbeat
-                            const newPlayer = { 
-                                id: user.uid, 
-                                name: playerName || `Player ${currentPlayers.length + 1}`, 
-                                life: 40, 
-                                commander: null, 
-                                isDead: false, 
-                                poison: 0, 
-                                milled: false, 
-                                commanderDamage: {},
-                                lastHeartbeat: Date.now() 
-                            };
+                            const newPlayer = { id: user.uid, name: playerName || `Player ${currentPlayers.length + 1}`, life: 40, commander: null, isDead: false, poison: 0, milled: false, commanderDamage: {} };
                             updateDoc(roomRef, { players: [...currentPlayers, newPlayer], lastActivity: serverTimestamp() });
                         } else {
                             setPlayers(currentPlayers);
@@ -1004,50 +880,14 @@
             const updateSelf = async (updates) => {
                 if (!joinedRoom) return;
                 const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
-                // We need to use functional state or fresh fetch to avoid race conditions but for this app simplistic approach works
-                // Actually updateSelf relies on 'players' state which is updated by snapshot.
                 const newPlayers = players.map(p => p.id === user.uid ? { ...p, ...updates } : p);
                 await updateDoc(roomRef, { players: newPlayers, lastActivity: serverTimestamp() });
                 if (updates.commander && joinedRoom !== "Test") updateCommanderStat(updates.commander);
             };
 
-            // --- Heartbeat & Reaper Logic ---
-            const isHost = players.length > 0 && players[0].id === user.uid;
-
-            // 1. Send Heartbeat (Every 5s)
-            useEffect(() => {
-                if (!joinedRoom) return;
-                const interval = setInterval(() => {
-                    updateSelf({ lastHeartbeat: Date.now() });
-                }, 5000); 
-                return () => clearInterval(interval);
-            }, [joinedRoom, players.length]); // Dep on players.length to ensure we have latest array if needed
-
-            // 2. Reaper: Host Checks for Zombies (Every 10s)
-            useEffect(() => {
-                if (!joinedRoom || !isHost) return;
-                const interval = setInterval(() => {
-                    const now = Date.now();
-                    // If last heartbeat was > 15s ago, assume disconnected/closed
-                    const validPlayers = players.filter(p => {
-                        const lastBeat = p.lastHeartbeat || now; 
-                        return (now - lastBeat) < 15000; 
-                    });
-
-                    if (validPlayers.length !== players.length) {
-                        const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
-                        if (validPlayers.length === 0) {
-                            deleteDoc(roomRef); // Should technically be impossible if host is running this
-                        } else {
-                            updateDoc(roomRef, { players: validPlayers });
-                        }
-                    }
-                }, 10000);
-                return () => clearInterval(interval);
-            }, [joinedRoom, isHost, players]);
-
-
             if (joinedRoom) {
+                const isHost = players.length > 0 && players[0].id === user.uid;
+
                 return (
                     <div className="h-full flex flex-col relative">
                          {/* Top Right Controls (Absolute) */}
@@ -1089,25 +929,19 @@
                                 <div className="flex gap-2">
                                      <button onClick={copyRoomLink} className="hidden md:flex items-center gap-1 text-xs bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-purple-500/50"><Icons.Share className="w-3 h-3" /> Share</button>
                                      {isHost && (
-                                       <>
-                                            <button 
-                                                onClick={() => { if(confirmClose) { closeRoom(); } else { setConfirmClose(true); setTimeout(() => setConfirmClose(false), 3000); } }} 
-                                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all font-medium border ${confirmClose ? 'bg-red-600 text-white border-red-600 scale-105' : 'bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white border-red-500/50'}`}
-                                            >
-                                                <Icons.Trash className="w-3 h-3" /> <span className="hidden md:inline">{confirmClose ? 'Confirm?' : 'Close'}</span>
+                                         <>
+                                            <button onClick={closeRoom} className="flex items-center gap-1 text-xs bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-red-500/50">
+                                                <Icons.Trash className="w-3 h-3" /> <span className="hidden md:inline">Close</span>
                                             </button>
-                                            <button 
-                                                onClick={() => { if(confirmReset) { resetGame(); } else { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); } }} 
-                                                className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all font-medium border ${confirmReset ? 'bg-purple-600 text-white border-purple-600 scale-105' : 'bg-slate-700 text-slate-300 hover:bg-purple-600 hover:text-white border-slate-600'}`}
-                                            >
-                                                <Icons.Refresh className="w-3 h-3" /> <span className="hidden md:inline">{confirmReset ? 'Confirm?' : 'Reset'}</span>
+                                            <button onClick={resetGame} className="flex items-center gap-1 text-xs bg-slate-700 text-slate-300 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-slate-600">
+                                                <Icons.Refresh className="w-3 h-3" /> <span className="hidden md:inline">Reset</span>
                                             </button>
-                                       </>
+                                         </>
                                      )}
-                                     <button onClick={handleLeaveRoom} className="flex items-center gap-1 text-xs bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-slate-600/50">
-                                        <Icons.LogOut className="w-3 h-3" /> <span className="hidden md:inline">Leave</span>
-                                     </button>
                                 </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => { setJoinedRoom(null); onLeave(); }} className="text-slate-400 hover:text-white text-sm font-medium">Leave</button>
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-4">
@@ -1219,20 +1053,20 @@
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.22.0 - Stability & Fixes</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Online Room</h3>
-                    <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Leave Button:</strong> Moved the leave button to the main toolbar for better visibility.</li>
-                        <li><strong className="text-slate-200">Background Updates:</strong> Added "Wake Lock" support. This keeps your screen active and helps ensure game updates continue even if you tab away or use a second monitor.</li>
-                    </ul>
-                </div>
-                <div className="relative pl-8 border-l-2 border-slate-700">
-                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-700 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-slate-500 font-mono text-sm">v2.21.0 - UI Clean Up</div>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.21.0 - UI Clean Up</div>
                     <h3 className="text-xl font-bold text-white mb-2">Online & Wrench</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
                         <li><strong className="text-slate-200">Online Toolbar:</strong> Restored all host functions (Reset Game, Close Room) to the top bar.</li>
                         <li><strong className="text-slate-200">Local Wrench:</strong> Fixed the positioning of the tools button in local play. It is now correctly centered over the player grid.</li>
+                    </ul>
+                </div>
+                 <div className="relative pl-8 border-l-2 border-slate-700">
+                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-700 ring-4 ring-slate-900" />
+                    <div className="mb-1 text-slate-500 font-mono text-sm">v2.20.0</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Global Tracking</h3>
+                    <ul className="list-disc pl-4 space-y-2 text-slate-400">
+                        <li><strong className="text-slate-200">Global Stats:</strong> Tracked death statistics (Poison, Commander, Mill, Standard) now appear on the Stats page.</li>
+                        <li><strong className="text-slate-200">Mill Death:</strong> Added a "Milled Out" toggle in the counters menu.</li>
                     </ul>
                 </div>
             </div>
@@ -1263,20 +1097,8 @@
 
         // --- Main App ---
         function App() {
-            // !!! ADDED FOR BACKGROUND UPDATES !!!
-            useBackgroundHeartbeat();
-
             const [user, setUser] = useState(null);
-            
-            // --- FIX 1: Check URL for Room Param ---
-            const [view, setView] = useState(() => {
-                if (typeof window !== 'undefined') {
-                    const params = new URLSearchParams(window.location.search);
-                    return params.get('room') ? 'online' : 'local';
-                }
-                return 'local';
-            });
-
+            const [view, setView] = useState('local');
             const [isLocalSetup, setIsLocalSetup] = useState(true);
             const [localPlayers, setLocalPlayers] = useState([]);
             const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -1399,8 +1221,7 @@
 
                         {isMenuOpen && <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setIsMenuOpen(false)} />}
 
-                        {/* --- FIX 2: Added min-h-0 to allow proper flex scrolling on Android --- */}
-                        <main className="flex-1 relative overflow-hidden bg-slate-950 flex flex-col min-h-0">
+                        <main className="flex-1 relative overflow-hidden bg-slate-950">
                             {view === 'local' && (
                                 <>
                                     {isLocalSetup ? (
