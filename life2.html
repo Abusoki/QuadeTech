@@ -45,12 +45,12 @@
 
         // --- Configuration & Global Variables ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-              apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
-              authDomain: "mtg-life-tool.firebaseapp.com",
-              projectId: "mtg-life-tool",
-              storageBucket: "mtg-life-tool.appspot.com",
-              messagingSenderId: "36730058988",
-              appId: "1:36730058988:web:757e2d9620593b4f65022a"
+          apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
+          authDomain: "mtg-life-tool.firebaseapp.com",
+          projectId: "mtg-life-tool",
+          storageBucket: "mtg-life-tool.appspot.com",
+          messagingSenderId: "36730058988",
+          appId: "1:36730058988:web:757e2d9620593b4f65022a"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -72,6 +72,7 @@
             Menu: (p) => <Icon {...p} path={<><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></>} />,
             X: (p) => <Icon {...p} path={<><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>} />,
             Users: (p) => <Icon {...p} path={<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>} />,
+            User: (p) => <Icon {...p} path={<><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>} />,
             Wifi: (p) => <Icon {...p} path={<><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></>} />,
             RotateCcw: (p) => <Icon {...p} path={<><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></>} />,
             Crown: (p) => <Icon {...p} path={<path d="m2 4 3 12h14l3-12-6 7-4-3-4 3-6-7z"/>} />,
@@ -84,7 +85,9 @@
             Sliders: (p) => <Icon {...p} path={<><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></>} />,
             Sword: (p) => <Icon {...p} path={<><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></>} />,
             Droplet: (p) => <Icon {...p} path={<path d="M12 22a7 7 0 0 0 7-7c0-2-2-3-2-3L12 2 7 12s-2 1-2 3a7 7 0 0 0 7 7z"/>} />,
-            RotateCw: (p) => <Icon {...p} path={<><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></>} />
+            RotateCw: (p) => <Icon {...p} path={<><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></>} />,
+            Lock: (p) => <Icon {...p} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>} />,
+            Unlock: (p) => <Icon {...p} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>} />
         };
 
         // --- Gemini API Utility ---
@@ -205,7 +208,8 @@
                                     onClick={() => onSelect({
                                         name: card.name,
                                         image: card.image_uris?.art_crop || card.card_faces?.[0]?.image_uris?.art_crop || '',
-                                        fullImage: card.image_uris?.large || card.card_faces?.[0]?.image_uris?.large || ''
+                                        fullImage: card.image_uris?.large || card.card_faces?.[0]?.image_uris?.large || '',
+                                        artist: card.artist || card.card_faces?.[0]?.artist || 'Unknown'
                                     })}
                                     className="flex items-center gap-4 p-2 hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group"
                                 >
@@ -473,25 +477,34 @@
                         </div>
                     )}
 
+                    {/* Static Rotation Button (Absolutely Positioned) */}
+                    {isLocal && (
+                        <div className="absolute top-4 right-4 z-50">
+                            <button onClick={toggleRotation} className="p-2 bg-black/40 hover:bg-black/60 rounded-full text-white/90 transition-colors shadow-lg border border-white/10">
+                                <Icons.RotateCcw className="w-4 h-4" />
+                            </button>
+                        </div>
+                    )}
+
                     {/* Content Layer with Rotation Wrapper */}
                     <div className={`relative z-10 flex flex-col h-full p-4 transition-transform duration-300 ${rotateClass}`}>
                         
                         {/* Header */}
                         <div className="flex justify-between items-start">
-                            <button onClick={() => setShowCmdrSearch(true)} className="flex items-center gap-2 bg-black/20 hover:bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md transition-colors text-white group">
-                                {commander?.name ? (
-                                    <span className="font-semibold text-sm truncate max-w-[120px]">{commander.name}</span>
-                                ) : (
-                                    <span className="flex items-center gap-1 text-xs uppercase tracking-wide font-bold opacity-80"><Icons.Search className="w-3 h-3"/> Commander</span>
-                                )}
-                            </button>
+                            <div className="flex flex-col items-start gap-1">
+                                <div className="text-xs font-bold text-purple-300 drop-shadow-md px-1 max-w-[140px] truncate">{name}</div>
+                                <button onClick={() => setShowCmdrSearch(true)} className="flex items-center gap-2 bg-black/20 hover:bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md transition-colors text-white group">
+                                    {commander?.name ? (
+                                        <span className="font-semibold text-sm truncate max-w-[120px]">{commander.name}</span>
+                                    ) : (
+                                        <span className="flex items-center gap-1 text-xs uppercase tracking-wide font-bold opacity-80"><Icons.Search className="w-3 h-3"/> Commander</span>
+                                    )}
+                                </button>
+                            </div>
                             
                             <div className="flex items-center gap-2">
-                                {isLocal && (
-                                    <button onClick={toggleRotation} className="p-2 bg-black/20 hover:bg-black/40 rounded-full text-white/80 transition-colors">
-                                        <Icons.RotateCcw className="w-4 h-4" />
-                                    </button>
-                                )}
+                                {/* Spacer for rotation button to avoid overlap if needed */}
+                                {isLocal && <div className="w-8 h-8"></div>}
                                 {isDead && <Icons.Skull className="text-red-500 w-6 h-6 animate-pulse" />}
                             </div>
                         </div>
@@ -531,6 +544,14 @@
                                 </button>
                             </div>
                         </div>
+
+                         {/* Artist & Copyright Info (Rotates with content) */}
+                         {commander?.artist && (
+                            <div className="absolute bottom-1 right-2 text-[10px] text-white/40 font-medium pointer-events-none text-right leading-tight">
+                                <div>Art by {commander.artist}</div>
+                                <div>™ & © Wizards of the Coast</div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Modals & Overlays */}
@@ -613,24 +634,49 @@
             </div>
         );
 
-        // 6. Online Room
+        // 6. Online Room (Updated)
         const OnlineRoom = ({ user, onLeave }) => {
-            const [roomName, setRoomName] = useState('');
             const [joinedRoom, setJoinedRoom] = useState(null);
             const [error, setError] = useState('');
             const [players, setPlayers] = useState([]);
+            
+            // Lobby State
+            const [rooms, setRooms] = useState([]);
+            const [playerName, setPlayerName] = useState('');
+            const [hostName, setHostName] = useState('');
+            const [hostPassword, setHostPassword] = useState('');
+            const [joinPassword, setJoinPassword] = useState('');
+            const [selectedRoomId, setSelectedRoomId] = useState(null);
+            
+            // Fetch Rooms for Lobby
+            useEffect(() => {
+                if(joinedRoom) return; // Don't fetch if already in game
+                
+                // Simple query: All rooms
+                const roomsRef = collection(db, 'artifacts', appId, 'public', 'data', 'rooms');
+                // We'll just fetch all and filter client side if needed, keeping rule 2 in mind
+                const unsub = onSnapshot(roomsRef, (snap) => {
+                    const r = [];
+                    snap.forEach(d => r.push({id: d.id, ...d.data()}));
+                    setRooms(r);
+                });
+                return () => unsub();
+            }, [joinedRoom]);
 
             const createRoom = async () => {
-                if (!roomName) return;
+                if (!hostName || !playerName) {
+                    setError("Room Name and Player Name are required.");
+                    return;
+                }
                 if (!user) {
                     setError("Authenticating... Please wait.");
                     return;
                 }
                 try {
-                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomName);
+                    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', hostName);
                     const playerData = { 
                         id: user.uid, 
-                        name: 'Host', 
+                        name: playerName, 
                         life: 40, 
                         commander: null, 
                         isDead: false, 
@@ -638,20 +684,41 @@
                         commanderDamage: {},
                         lastActive: Date.now() 
                     };
-                    await setDoc(roomRef, { name: roomName, createdAt: serverTimestamp(), players: [playerData], log: [] });
-                    setJoinedRoom(roomName);
+                    
+                    await setDoc(roomRef, { 
+                        name: hostName, 
+                        password: hostPassword, // Store password
+                        createdAt: serverTimestamp(), 
+                        players: [playerData], 
+                        log: [] 
+                    });
+                    setJoinedRoom(hostName);
                 } catch (err) { setError(err.message); }
             };
 
             const joinRoom = async () => {
-                if (!roomName) return;
-                if (!user) {
-                    setError("Authenticating... Please wait.");
+                if (!selectedRoomId && !hostName) {
+                    setError("Select a room or enter a name.");
                     return;
                 }
-                setJoinedRoom(roomName);
+                const rName = selectedRoomId || hostName;
+                
+                if (!playerName) {
+                    setError("Enter your Display Name.");
+                    return;
+                }
+
+                // Check password if selecting from list
+                const roomData = rooms.find(r => r.id === rName);
+                if (roomData && roomData.password && roomData.password !== joinPassword) {
+                    setError("Incorrect Password");
+                    return;
+                }
+
+                setJoinedRoom(rName);
             };
 
+            // In-Game Logic
             useEffect(() => {
                 if (!joinedRoom || !user) return;
                 const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
@@ -660,10 +727,20 @@
                         const data = docSnap.data();
                         let currentPlayers = data.players || [];
                         const amIIn = currentPlayers.find(p => p.id === user.uid);
+                        
+                        // If not in, add me
                         if (!amIIn) {
+                            // Check password again if it was a direct join (rare but safe)
+                            if (data.password && data.password !== joinPassword && !selectedRoomId) {
+                                // If we joined by typing name and didn't know password
+                                setError("Room is locked.");
+                                setJoinedRoom(null);
+                                return;
+                            }
+
                             const newPlayer = { 
                                 id: user.uid, 
-                                name: `Player ${currentPlayers.length + 1}`, 
+                                name: playerName || `Player ${currentPlayers.length + 1}`, // Fallback
                                 life: 40, 
                                 commander: null, 
                                 isDead: false,
@@ -689,6 +766,7 @@
                 await updateDoc(roomRef, { players: newPlayers });
             };
 
+            // Game View
             if (joinedRoom) {
                 return (
                     <div className="h-full flex flex-col">
@@ -706,7 +784,7 @@
                                     <PlayerCard 
                                         key={p.id} 
                                         {...p} 
-                                        players={players} // Pass all players for Cmdr Damage tracking
+                                        players={players} 
                                         isLocal={false}
                                         color={p.id === user.uid ? 'bg-slate-800 ring-2 ring-purple-500' : 'bg-slate-800'} 
                                         onUpdate={(id, updates) => { if (id === user.uid) updateSelf(updates); }} 
@@ -719,21 +797,145 @@
                 );
             }
 
+            // Lobby View
             return (
-                <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-                    <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 max-w-md w-full shadow-2xl">
-                        <Icons.Users className="w-16 h-16 text-purple-500 mx-auto mb-6" />
-                        <h2 className="text-2xl font-bold text-white mb-2">Multiplayer Lobby</h2>
-                        <p className="text-slate-400 mb-8">Join a room to sync life totals and commanders with friends.</p>
-                        <div className="space-y-4">
-                            <input type="text" placeholder="Enter Room Name" className="w-full bg-slate-900 border border-slate-700 text-white p-3 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" value={roomName} onChange={(e) => setRoomName(e.target.value)} />
-                            <div className="grid grid-cols-2 gap-4">
-                                <button onClick={createRoom} disabled={!roomName || !user} className="bg-purple-600 hover:bg-purple-500 text-white p-3 rounded-lg font-bold transition-colors disabled:opacity-50">Host</button>
-                                <button onClick={joinRoom} disabled={!roomName || !user} className="bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg font-bold transition-colors disabled:opacity-50">Join</button>
+                <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto">
+                    <div className="max-w-4xl mx-auto w-full space-y-8">
+                        
+                        {/* Header & Player Name */}
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 p-6 rounded-2xl border border-slate-700">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-purple-600/20 rounded-xl">
+                                    <Icons.Users className="w-8 h-8 text-purple-500" />
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-bold text-white">Multiplayer Lobby</h2>
+                                    <p className="text-slate-400 text-sm">Join a game or host your own.</p>
+                                </div>
                             </div>
-                            {!user && <div className="text-yellow-400 text-xs mt-2 animate-pulse">Connecting to services...</div>}
-                            {error && <div className="text-red-400 text-sm mt-2">{error}</div>}
+                            <div className="w-full md:w-auto">
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Your Display Name</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Enter Your Name..." 
+                                    className="w-full md:w-64 bg-slate-800 border border-slate-600 text-white p-3 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold"
+                                    value={playerName}
+                                    onChange={(e) => setPlayerName(e.target.value)}
+                                />
+                            </div>
                         </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            
+                            {/* Left: Active Rooms List */}
+                            <div className="space-y-4">
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Icons.Wifi className="w-5 h-5 text-green-500" /> Active Rooms
+                                </h3>
+                                <div className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden min-h-[300px] flex flex-col">
+                                    {rooms.length === 0 ? (
+                                        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-8">
+                                            <p>No active rooms found.</p>
+                                            <p className="text-sm">Be the first to host one!</p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-slate-800">
+                                            {rooms.map(room => (
+                                                <div 
+                                                    key={room.id}
+                                                    onClick={() => {
+                                                        setSelectedRoomId(room.id);
+                                                        setHostName(''); // Clear manual entry
+                                                    }}
+                                                    className={`p-4 flex items-center justify-between cursor-pointer transition-colors ${selectedRoomId === room.id ? 'bg-purple-900/20 border-l-4 border-purple-500' : 'hover:bg-slate-800 border-l-4 border-transparent'}`}
+                                                >
+                                                    <div>
+                                                        <div className="font-bold text-white">{room.name}</div>
+                                                        <div className="text-xs text-slate-500">{(room.players || []).length} Players</div>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        {room.password && <Icons.Lock className="w-4 h-4 text-orange-400" />}
+                                                        {!room.password && <Icons.Unlock className="w-4 h-4 text-green-400/50" />}
+                                                        <Icons.User className="w-5 h-5 text-slate-600" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Right: Actions */}
+                            <div className="space-y-6">
+                                {/* Join Selected Panel */}
+                                {selectedRoomId && (
+                                    <div className="bg-slate-800 p-6 rounded-2xl border border-purple-500/50 shadow-lg animate-in fade-in slide-in-from-right-4">
+                                        <h3 className="text-lg font-bold text-white mb-4">Join "{selectedRoomId}"</h3>
+                                        <div className="space-y-4">
+                                            {rooms.find(r => r.id === selectedRoomId)?.password && (
+                                                <div>
+                                                    <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Room Password</label>
+                                                    <input 
+                                                        type="password" 
+                                                        placeholder="Required" 
+                                                        className="w-full bg-slate-900 border border-slate-700 text-white p-3 rounded-lg outline-none focus:border-purple-500"
+                                                        value={joinPassword}
+                                                        onChange={(e) => setJoinPassword(e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
+                                            <button 
+                                                onClick={joinRoom}
+                                                disabled={!user || !playerName}
+                                                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                Join Game
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Host New Panel */}
+                                <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700">
+                                    <h3 className="text-lg font-bold text-white mb-4">Host New Room</h3>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Room Name</label>
+                                            <input 
+                                                type="text" 
+                                                placeholder="e.g. Friday Night Magic" 
+                                                className="w-full bg-slate-800 border border-slate-600 text-white p-3 rounded-lg outline-none focus:border-purple-500"
+                                                value={hostName}
+                                                onChange={(e) => {
+                                                    setHostName(e.target.value);
+                                                    setSelectedRoomId(null);
+                                                }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Password (Optional)</label>
+                                            <input 
+                                                type="text" 
+                                                placeholder="Leave empty for open room" 
+                                                className="w-full bg-slate-800 border border-slate-600 text-white p-3 rounded-lg outline-none focus:border-purple-500"
+                                                value={hostPassword}
+                                                onChange={(e) => setHostPassword(e.target.value)}
+                                            />
+                                        </div>
+                                        <button 
+                                            onClick={createRoom}
+                                            disabled={!user || !hostName || !playerName}
+                                            className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Create & Host
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                        
+                        {error && <div className="p-4 bg-red-900/50 border border-red-500 text-red-200 rounded-xl text-center font-bold animate-pulse">{error}</div>}
                     </div>
                 </div>
             );
@@ -745,16 +947,15 @@
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.4.0 - Advanced Tracking</div>
-                    <h3 className="text-xl font-bold text-white mb-2">Counters & Contacts</h3>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.5.0 - Lobby Upgrade</div>
+                    <h3 className="text-xl font-bold text-white mb-2">Passwords & Profiles</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
-                        <li><strong className="text-slate-200">Counters Menu:</strong> Added a new "Counters" button to player cards.</li>
-                        <li><strong className="text-slate-200">Poison Tracking:</strong> You can now track Poison/Infect counters. Hitting 10 marks the player as dead.</li>
-                        <li><strong className="text-slate-200">Commander Damage:</strong> Added specific tracking for damage received from opponent commanders. Hitting 21 from a single source marks the player as dead.</li>
-                        <li><strong className="text-slate-200">Table Rotation:</strong> In local games, players can now rotate their individual card 90/180 degrees using the rotate button in the top right.</li>
-                        <li><strong className="text-slate-200">Contact Page:</strong> Added a way to reach the developer.</li>
+                        <li><strong className="text-slate-200">Active Room Browser:</strong> You can now see a list of live rooms in the online lobby.</li>
+                        <li><strong className="text-slate-200">Room Passwords:</strong> Hosts can now set a password for their rooms to keep games private.</li>
+                        <li><strong className="text-slate-200">Display Names:</strong> You can now set a custom player name when joining or hosting. This name appears above your Commander.</li>
                     </ul>
                 </div>
+                {/* ... existing changelogs ... */}
             </div>
         );
 
