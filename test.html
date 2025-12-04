@@ -761,6 +761,9 @@
             // --- FIX 3: Ref to hold latest player state for Heartbeat closure ---
             const playersRef = useRef([]); 
             
+            // --- FIX 4: Ref to prevent "Click Twice" race condition ---
+            const isJoiningRef = useRef(false);
+
             const TIMEOUT_INACTIVITY = 20 * 60 * 1000;
             const TIMEOUT_DURATION = 12 * 60 * 60 * 1000;
 
@@ -855,9 +858,12 @@
                             });
                         }
                     });
+                    // Mark as joining to prevent race condition kick
+                    isJoiningRef.current = true;
                     setJoinedRoom(roomName);
                 } catch (e) {
                     setError(e.message);
+                    isJoiningRef.current = false;
                 }
             };
 
@@ -883,8 +889,9 @@
                         lastActivity: serverTimestamp(), players: [playerData], log: [], messages: [] 
                     });
                     if (playerData.commander && hostName !== "Test") updateCommanderStat(playerData.commander);
+                    isJoiningRef.current = true;
                     setJoinedRoom(hostName);
-                } catch (err) { setError(err.message); }
+                } catch (err) { setError(err.message); isJoiningRef.current = false; }
             };
 
             const joinRoom = () => {
@@ -991,10 +998,18 @@
                         const amIIn = currentPlayers.find(p => p.id === user.uid);
                         
                         if (!amIIn) {
-                            // If I'm not in the list, I was kicked or removed.
+                            // FIX: Check if we are currently in the process of joining
+                            if (isJoiningRef.current) {
+                                // Ignore this snapshot, wait for the transaction to propagate
+                                return;
+                            }
+                            
+                            // If I'm not in the list and not joining, I was kicked.
                             setJoinedRoom(null);
                             setError("You have left the room.");
                         } else {
+                            // We are present, clear the joining flag
+                            isJoiningRef.current = false;
                             setPlayers(currentPlayers);
                             playersRef.current = currentPlayers; // Update Ref for heartbeat
                         }
