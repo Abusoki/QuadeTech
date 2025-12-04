@@ -96,8 +96,6 @@
             ExternalLink: (p) => <Icon {...p} path={<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></>} />,
             BarChart2: (p) => <Icon {...p} path={<><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></>} />,
             FileText: (p) => <Icon {...p} path={<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></>} />,
-            Lightbulb: (p) => <Icon {...p} path={<><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-1 1.5-2 1.5-3.5 0-2.2-1.8-4-4-4s-4 1.8-4 4c0 1.5.5 2.5 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></>} />,
-            Loader2: (p) => <Icon {...p} className={`${p.className || ''} animate-spin`} path={<path d="M21 12a9 9 0 1 1-6.219-8.56" />} />,
             Mail: (p) => <Icon {...p} path={<><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></>} />,
             Sliders: (p) => <Icon {...p} path={<><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></>} />,
             Sword: (p) => <Icon {...p} path={<><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/></>} />,
@@ -112,7 +110,8 @@
             Send: (p) => <Icon {...p} path={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} />,
             Dices: (p) => <Icon {...p} path={<><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 8h.01"/><path d="M8 8h.01"/><path d="M8 16h.01"/><path d="M16 16h.01"/><path d="M12 12h.01"/></>} />,
             Clock: (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} />,
-            Wrench: (p) => <Icon {...p} path={<><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></>} />
+            Wrench: (p) => <Icon {...p} path={<><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></>} />,
+            Refresh: (p) => <Icon {...p} path={<><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>} />
         };
 
         // --- Helpers ---
@@ -819,6 +818,29 @@
                     } catch (e) { setError(e.message); }
                 }
             };
+            
+            // New: Online Reset Function
+            const resetGame = async () => {
+                if (!joinedRoom) return;
+                if (confirm("Restart game? All life totals and counters will be reset.")) {
+                    try {
+                        const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', joinedRoom);
+                        // Reset all players locally then push
+                        const resetPlayers = players.map(p => ({
+                            ...p,
+                            life: 40,
+                            poison: 0,
+                            commanderDamage: {},
+                            isDead: false
+                        }));
+                        await updateDoc(roomRef, { 
+                            players: resetPlayers, 
+                            log: [],
+                            messages: arrayUnion({sender: "System", text: "Game has been reset.", timestamp: Date.now()})
+                        });
+                    } catch(e) { setError(e.message); }
+                }
+            };
 
             // Chat Send
             const sendMessage = async () => {
@@ -977,9 +999,14 @@
                             </div>
                             <div className="flex items-center gap-3">
                                 {isHost && (
-                                    <button onClick={closeRoom} className="text-red-500 hover:text-red-400 p-2 rounded-full hover:bg-red-900/30 transition-colors" title="Close Room">
-                                        <Icons.Trash className="w-5 h-5" />
-                                    </button>
+                                    <>
+                                        <button onClick={resetGame} className="text-purple-400 hover:text-white p-2 rounded-full hover:bg-purple-600/30 transition-colors" title="Reset Game">
+                                            <Icons.RotateCcw className="w-5 h-5" />
+                                        </button>
+                                        <button onClick={closeRoom} className="text-red-500 hover:text-red-400 p-2 rounded-full hover:bg-red-900/30 transition-colors" title="Close Room">
+                                            <Icons.Trash className="w-5 h-5" />
+                                        </button>
+                                    </>
                                 )}
                                 <button onClick={() => { setJoinedRoom(null); onLeave(); }} className="text-slate-400 hover:text-white text-sm font-medium">Leave</button>
                             </div>
@@ -1092,14 +1119,46 @@
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
-                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.15.0 - Local Tools</div>
+                    <div className="mb-1 text-purple-400 font-mono text-sm">v2.16.0 - Setup & Reset</div>
+                    <h3 className="text-xl font-bold text-white mb-2">New Game Flow</h3>
+                    <ul className="list-disc pl-4 space-y-2 text-slate-400">
+                        <li><strong className="text-slate-200">Local Setup:</strong> Choose between 2-6 players when starting a local game.</li>
+                        <li><strong className="text-slate-200">Local Restart:</strong> Use the "New Game" button in the wrench menu to return to the setup screen.</li>
+                        <li><strong className="text-slate-200">Online Reset:</strong> Hosts can now use the refresh icon in the top bar to instantly reset the game state (life, poison, etc.) for everyone in the room.</li>
+                    </ul>
+                </div>
+                 <div className="relative pl-8 border-l-2 border-slate-700">
+                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-700 ring-4 ring-slate-900" />
+                    <div className="mb-1 text-slate-500 font-mono text-sm">v2.15.0</div>
                     <h3 className="text-xl font-bold text-white mb-2">Centralized Utilities</h3>
                     <ul className="list-disc pl-4 space-y-2 text-slate-400">
                         <li><strong className="text-slate-200">Local Tool Menu:</strong> In local games, tap the central Wrench icon to access Dice, Coins, History, and Search.</li>
                         <li><strong className="text-slate-200">Winner Detection:</strong> The last player standing in a local game is now highlighted with a gold glow and crown.</li>
                     </ul>
                 </div>
-                {/* ... old changelogs ... */}
+            </div>
+        );
+
+        // --- Local Setup Component ---
+        const LocalSetup = ({ onStart }) => (
+            <div className="h-full flex flex-col items-center justify-center p-8 animate-in fade-in">
+                <div className="bg-slate-900 p-8 rounded-2xl border border-slate-700 shadow-2xl max-w-md w-full text-center">
+                    <Icons.Users className="w-16 h-16 text-purple-500 mx-auto mb-6" />
+                    <h2 className="text-3xl font-bold text-white mb-2">Local Game</h2>
+                    <p className="text-slate-400 mb-8">How many players?</p>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        {[2, 3, 4, 5, 6].map(num => (
+                            <button 
+                                key={num}
+                                onClick={() => onStart(num)}
+                                className="bg-slate-800 hover:bg-purple-600 text-white font-bold py-4 rounded-xl text-xl transition-all border border-slate-700 hover:border-purple-500"
+                            >
+                                {num} Players
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
         );
 
@@ -1107,12 +1166,8 @@
         function App() {
             const [user, setUser] = useState(null);
             const [view, setView] = useState('local');
-            const [localPlayers, setLocalPlayers] = useState([
-                { id: 1, name: 'P1', life: 40, commander: null, color: 'bg-slate-800', poison: 0, commanderDamage: {} },
-                { id: 2, name: 'P2', life: 40, commander: null, color: 'bg-slate-800', poison: 0, commanderDamage: {} },
-                { id: 3, name: 'P3', life: 40, commander: null, color: 'bg-slate-800', poison: 0, commanderDamage: {} },
-                { id: 4, name: 'P4', life: 40, commander: null, color: 'bg-slate-800', poison: 0, commanderDamage: {} }
-            ]);
+            const [isLocalSetup, setIsLocalSetup] = useState(true);
+            const [localPlayers, setLocalPlayers] = useState([]);
             const [isMenuOpen, setIsMenuOpen] = useState(false);
             const [localLog, setLocalLog] = useState([]);
             
@@ -1136,10 +1191,27 @@
                 return () => unsubscribe();
             }, []);
 
-            const resetLocalGame = () => {
-                setLocalPlayers(localPlayers.map(p => ({ ...p, life: 40, commander: null, isDead: false, poison: 0, commanderDamage: {} })));
+            const startLocalGame = (count) => {
+                const newPlayers = Array.from({ length: count }, (_, i) => ({
+                    id: i + 1,
+                    name: `P${i + 1}`,
+                    life: 40,
+                    commander: null,
+                    color: 'bg-slate-800',
+                    poison: 0,
+                    commanderDamage: {},
+                    isDead: false
+                }));
+                setLocalPlayers(newPlayers);
                 setLocalLog([]);
-                addLocalLog("Game Reset");
+                addLocalLog(`Started ${count}-player game`);
+                setIsLocalSetup(false);
+                setShowLocalMenu(false); // Ensure menu is closed
+            };
+
+            const resetLocalGame = () => {
+                setIsLocalSetup(true);
+                setShowLocalMenu(false);
             };
             
             const addLocalLog = (msg) => {
@@ -1169,7 +1241,7 @@
 
             // Determine Winner for Local Game
             const activePlayers = localPlayers.filter(p => !p.isDead);
-            const winnerId = activePlayers.length === 1 ? activePlayers[0].id : null;
+            const winnerId = (!isLocalSetup && activePlayers.length === 1 && localPlayers.length > 1) ? activePlayers[0].id : null;
 
             return (
                 <div className="bg-slate-950 min-h-screen text-slate-200 font-sans selection:bg-purple-500/30 overflow-hidden flex flex-col">
@@ -1206,12 +1278,6 @@
                             </div>
 
                             <div className="p-4 border-t border-slate-800">
-                                {view === 'local' && (
-                                    <button onClick={resetLocalGame} className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-red-900/30 text-slate-300 hover:text-red-400 p-3 rounded-lg transition-colors border border-slate-700 hover:border-red-800">
-                                        <Icons.RotateCcw className="w-4 h-4" />
-                                        <span>Reset Game</span>
-                                    </button>
-                                )}
                                 <div className="mt-4 text-center text-xs text-slate-600">
                                     {user ? `ID: ${user.uid.slice(0, 6)}...` : 'Connecting...'}
                                 </div>
@@ -1222,57 +1288,72 @@
 
                         <main className="flex-1 relative overflow-hidden bg-slate-950">
                             {view === 'local' && (
-                                <div className="relative h-full">
-                                    <div className="absolute inset-0 grid grid-cols-1 sm:grid-cols-2 gap-1 p-1 md:p-4">
-                                        {localPlayers.map(p => (
-                                            <PlayerCard 
-                                                key={p.id} 
-                                                {...p} 
-                                                isLocal={true}
-                                                isWinner={p.id === winnerId}
-                                                players={localPlayers}
-                                                onUpdate={updateLocalPlayer} 
-                                                onDead={(id) => updateLocalPlayer(id, { isDead: true })} 
-                                                onLog={addLocalLog}
-                                            />
-                                        ))}
-                                    </div>
-                                    
-                                    {/* Center Tool Button (Floating) */}
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 flex flex-col items-center justify-center">
-                                        <button 
-                                            onClick={() => setShowLocalMenu(!showLocalMenu)}
-                                            className={`p-4 rounded-full shadow-2xl transition-all duration-300 border-4 border-slate-900 ${showLocalMenu ? 'bg-purple-600 rotate-90 scale-110' : 'bg-slate-800 hover:bg-slate-700'}`}
-                                        >
-                                            <Icons.Wrench className="w-6 h-6 text-white" />
-                                        </button>
-
-                                        {/* Radial/Popout Menu Options */}
-                                        {showLocalMenu && (
-                                            <div className="absolute flex flex-col gap-3 items-center" style={{top: '4.5rem'}}> 
-                                                {/* Using simpler vertical stack for mobile reliability vs radial */}
-                                                <button 
-                                                    onClick={() => { setShowToolsModal(true); setShowLocalMenu(false); }}
-                                                    className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 whitespace-nowrap"
-                                                >
-                                                    <Icons.Dices className="w-4 h-4" /> Tools
-                                                </button>
-                                                <button 
-                                                    onClick={() => { setShowHistoryModal(true); setShowLocalMenu(false); }}
-                                                    className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-75 whitespace-nowrap"
-                                                >
-                                                    <Icons.Clock className="w-4 h-4" /> History
-                                                </button>
-                                                <button 
-                                                    onClick={() => { setShowCardSearch(true); setShowLocalMenu(false); }}
-                                                    className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-100 whitespace-nowrap"
-                                                >
-                                                    <Icons.Search className="w-4 h-4" /> Database
-                                                </button>
+                                <>
+                                    {isLocalSetup ? (
+                                        <LocalSetup onStart={startLocalGame} />
+                                    ) : (
+                                        <div className="relative h-full">
+                                            <div className={`absolute inset-0 grid gap-1 p-1 md:p-4 ${
+                                                localPlayers.length <= 2 ? 'grid-cols-1 sm:grid-cols-2' : 
+                                                localPlayers.length <= 4 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2' : 
+                                                'grid-cols-2 lg:grid-cols-3'
+                                            }`}>
+                                                {localPlayers.map(p => (
+                                                    <PlayerCard 
+                                                        key={p.id} 
+                                                        {...p} 
+                                                        isLocal={true}
+                                                        isWinner={p.id === winnerId}
+                                                        players={localPlayers}
+                                                        onUpdate={updateLocalPlayer} 
+                                                        onDead={(id) => updateLocalPlayer(id, { isDead: true })} 
+                                                        onLog={addLocalLog}
+                                                    />
+                                                ))}
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
+                                            
+                                            {/* Center Tool Button (Floating) */}
+                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 flex flex-col items-center justify-center">
+                                                <button 
+                                                    onClick={() => setShowLocalMenu(!showLocalMenu)}
+                                                    className={`p-4 rounded-full shadow-2xl transition-all duration-300 border-4 border-slate-900 ${showLocalMenu ? 'bg-purple-600 rotate-90 scale-110' : 'bg-slate-800 hover:bg-slate-700'}`}
+                                                >
+                                                    <Icons.Wrench className="w-6 h-6 text-white" />
+                                                </button>
+
+                                                {/* Radial/Popout Menu Options */}
+                                                {showLocalMenu && (
+                                                    <div className="absolute flex flex-col gap-3 items-center" style={{top: '4.5rem'}}> 
+                                                        <button 
+                                                            onClick={resetLocalGame}
+                                                            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-red-600 transition-colors animate-in fade-in slide-in-from-top-2 whitespace-nowrap"
+                                                        >
+                                                            <Icons.RotateCcw className="w-4 h-4" /> New Game
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { setShowToolsModal(true); setShowLocalMenu(false); }}
+                                                            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-75 whitespace-nowrap"
+                                                        >
+                                                            <Icons.Dices className="w-4 h-4" /> Tools
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { setShowHistoryModal(true); setShowLocalMenu(false); }}
+                                                            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-100 whitespace-nowrap"
+                                                        >
+                                                            <Icons.Clock className="w-4 h-4" /> History
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { setShowCardSearch(true); setShowLocalMenu(false); }}
+                                                            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl border border-slate-700 hover:bg-purple-600 transition-colors animate-in fade-in slide-in-from-top-2 delay-150 whitespace-nowrap"
+                                                        >
+                                                            <Icons.Search className="w-4 h-4" /> Database
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
                             {view === 'online' && <OnlineRoom user={user} onLeave={() => setView('local')} />}
                             {view === 'stats' && <StatsPage user={user} />}
@@ -1280,8 +1361,8 @@
                             {view === 'changes' && <Changelog />}
 
                             {/* Global/Local Modals for Local View */}
-                            {view === 'local' && showToolsModal && <GameToolsModal players={localPlayers} onClose={() => setShowToolsModal(false)} />}
-                            {view === 'local' && showHistoryModal && <HistoryModal log={localLog} onClose={() => setShowHistoryModal(false)} />}
+                            {view === 'local' && !isLocalSetup && showToolsModal && <GameToolsModal players={localPlayers} onClose={() => setShowToolsModal(false)} />}
+                            {view === 'local' && !isLocalSetup && showHistoryModal && <HistoryModal log={localLog} onClose={() => setShowHistoryModal(false)} />}
                             {view === 'local' && showCardSearch && <CardSearch onSelect={(card) => { setViewingCard(card); setShowCardSearch(false); }} onClose={() => setShowCardSearch(false)} mode="any" />}
                             {view === 'local' && viewingCard && <CardDetailModal card={viewingCard} onClose={() => setViewingCard(null)} />}
                         </main>
