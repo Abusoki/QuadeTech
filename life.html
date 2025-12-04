@@ -119,6 +119,7 @@
     </div>
     <nav class="site-nav" role="navigation" aria-label="Main">
       <button id="nav-home" class="nav-btn">Home</button>
+      <button id="nav-local" class="nav-btn">Local</button>
       <button id="nav-changes" class="nav-btn">Changes</button>
       <button id="nav-contact" class="nav-btn">Contact</button>
     </nav>
@@ -290,19 +291,43 @@
     // ----------------------------------------------------------------------
     // ROUTING & PAGES
     // ----------------------------------------------------------------------
-    const navButtons = { home: document.getElementById('nav-home'), changes: document.getElementById('nav-changes'), contact: document.getElementById('nav-contact') };
-    function setActiveNav(page){ Object.values(navButtons).forEach(b=>b.classList.remove('active')); if(navButtons[page]) navButtons[page].classList.add('active'); }
-    function navigateTo(page){ if(location.hash !== `#${page}`) history.pushState(null,'',`#${page}`); setActiveNav(page); if(page === 'home') renderHome(); else if(page === 'changes') renderChanges(); else if(page === 'contact') renderContact(); }
+    const navButtons = {
+      home: document.getElementById('nav-home'),
+      local: document.getElementById('nav-local'),
+      changes: document.getElementById('nav-changes'),
+      contact: document.getElementById('nav-contact')
+    };
+    function setActiveNav(page){
+      Object.values(navButtons).forEach(b=>b.classList.remove('active'));
+      if(navButtons[page]) navButtons[page].classList.add('active');
+    }
+    function navigateTo(page){
+      if(location.hash !== `#${page}`) history.pushState(null,'',`#${page}`);
+      setActiveNav(page);
+      if(page === 'home') renderHome();
+      else if(page === 'local') renderLocal();
+      else if(page === 'changes') renderChanges();
+      else if(page === 'contact') renderContact();
+    }
     navButtons.home.addEventListener('click', ()=>navigateTo('home'));
+    navButtons.local.addEventListener('click', ()=>navigateTo('local'));
     navButtons.changes.addEventListener('click', ()=>navigateTo('changes'));
     navButtons.contact.addEventListener('click', ()=>navigateTo('contact'));
-    window.addEventListener('popstate', ()=>{ const page = (location.hash || '#home').replace('#','') || 'home'; setActiveNav(page); if(page === 'home') renderHome(); else if(page === 'changes') renderChanges(); else if(page === 'contact') renderContact(); });
+    window.addEventListener('popstate', ()=>{
+      const page = (location.hash || '#home').replace('#','') || 'home';
+      setActiveNav(page);
+      if(page === 'home') renderHome();
+      else if(page === 'local') renderLocal();
+      else if(page === 'changes') renderChanges();
+      else if(page === 'contact') renderContact();
+    });
 
     async function renderHome(){ await renderSetupView(); }
 
     const CHANGELOG = [
-      { version: "0.9.8", date: "2025-12-08", notes: "Show CMD labels, persist lobby on refresh, 20-minute timeout based on life changes, lobby timestamps." },
-      { version: "0.9.7", date: "2025-12-07", notes: "Show CMD DMG to/from on each panel; incoming editor updates opponent's outgoing." }
+      { version: "0.0.3", date: "2025-12-08", notes: "Added a local lobby to play with a single device. (Need to add panel rotations later.)" },
+      { version: "0.0.2", date: "2025-12-08", notes: "Show CMD labels, persist lobby on refresh, 20-minute timeout based on life changes, lobby timestamps." },
+      { version: "0.0.1", date: "2025-12-07", notes: "Fleshed out the UI, follow through on a design, set up the live portion." }
     ];
 
     function renderChanges(){
@@ -337,6 +362,387 @@
         const status = document.getElementById('contact-status');
         try{ await navigator.clipboard.writeText('CardboardBonfire@gmail.com'); status.textContent = 'Email address copied to clipboard.'; }
         catch(e){ console.error(e); status.textContent = 'Unable to copy automatically — please copy: CardboardBonfire@gmail.com'; }
+      });
+    }
+
+    // ----------------------------------------------------------------------
+    // LOCAL PAGE (offline life tracker; single add box; no lobby name)
+    // ----------------------------------------------------------------------
+    const LOCAL_STORAGE_KEY = 'localRoom_v2';
+
+    function getLocalData(){
+      const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+    }
+    function setLocalData(data){
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+    }
+    function resetLocalRoom(){
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+    }
+    function uid(){ return 'p' + Math.random().toString(36).slice(2,9); }
+
+    function renderLocal(){
+      const appContainer = document.getElementById('app-container');
+      const cached = getLocalData();
+
+      let html = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          <div>
+            <h2 style="margin:0;color:var(--text)">Local Game</h2>
+            <div class="muted" style="font-size:.9rem;margin-top:6px">Offline life tracking. Data stays in your browser.</div>
+          </div>
+          <div class="row">
+            <button id="local-new-btn" class="btn-secondary">New Local Session</button>
+            ${cached ? `<button id="local-reset-btn" class="btn-danger">Clear Local Data</button>` : ``}
+          </div>
+        </div>
+      `;
+
+      // Single add-player box (no lobby name)
+      html += `
+        <div id="local-setup" style="background:#121416;padding:12px;border-radius:8px;border:1px solid var(--dark-border);margin-bottom:12px">
+          <div class="row" style="gap:12px">
+            <div style="flex:1"><input type="text" id="local-player-name" placeholder="Player name"></div>
+            <div style="width:220px"><input type="text" id="local-commander-name" placeholder="Commander (optional)"></div>
+            <div style="width:160px"><button id="local-add-player-btn" class="btn-primary" style="width:100%">Add Player</button></div>
+          </div>
+          <p id="local-status" class="muted" style="margin-top:8px"></p>
+        </div>
+      `;
+
+      html += `<div id="local-room-container"></div>`;
+      appContainer.innerHTML = html;
+
+      // Header actions
+      document.getElementById('local-new-btn').addEventListener('click', ()=>{
+        resetLocalRoom();
+        const init = { roomName: 'Local Lobby', createdAt: Date.now(), playersOrder: [], players: {} };
+        setLocalData(init);
+        const status = document.getElementById('local-status');
+        if(status) status.textContent = 'New local session started. Add players below.';
+        renderLocalRoom(init);
+      });
+      const resetBtn = document.getElementById('local-reset-btn');
+      if(resetBtn){
+        resetBtn.addEventListener('click', ()=>{
+          if(!confirm('Clear all local game data? This cannot be undone.')) return;
+          resetLocalRoom();
+          renderLocal();
+        });
+      }
+
+      // Initial render: ensure a local session exists (no name needed)
+      let data = cached || { roomName: 'Local Lobby', createdAt: Date.now(), playersOrder: [], players: {} };
+      setLocalData(data);
+      renderLocalRoom(data);
+
+      // Add player from single box
+      document.getElementById('local-add-player-btn').addEventListener('click', ()=>{
+        const playerName = (document.getElementById('local-player-name').value || '').trim();
+        const commander = (document.getElementById('local-commander-name').value || '').trim();
+        if(!playerName){
+          const status = document.getElementById('local-status');
+          if(status) status.textContent = 'Enter a player name.';
+          return;
+        }
+        const d = getLocalData() || data;
+        const pid = uid();
+        d.players[pid] = {
+          name: playerName,
+          life: getStartingLife(),
+          infect: 0,
+          commanderName: commander || '',
+          commanderDamage: {}
+        };
+        d.playersOrder.push(pid);
+        setLocalData(d);
+        document.getElementById('local-player-name').value = '';
+        document.getElementById('local-commander-name').value = '';
+        renderLocalRoom(d);
+      });
+    }
+
+    function renderLocalRoom(roomData){
+      const container = document.getElementById('local-room-container');
+      if(!container) return;
+
+      const playerIds = Array.isArray(roomData.playersOrder) && roomData.playersOrder.length
+        ? [...roomData.playersOrder]
+        : Object.keys(roomData.players || {});
+
+      let html = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          <div>
+            <h3 style="margin:0;color:var(--text)">Lobby: ${roomData.roomName || 'Local Lobby'}</h3>
+            <div class="muted" style="font-size:.9rem;margin-top:6px">Players: ${playerIds.length}</div>
+          </div>
+          <div class="row">
+            <button id="local-restart-btn" class="btn-secondary">Restart Game</button>
+          </div>
+        </div>
+      `;
+
+      html += `<div class="player-grid">`;
+
+      playerIds.forEach(pid=>{
+        const p = roomData.players[pid];
+        if(!p) return;
+
+        // Elimination: life <= 0 or incoming CMD from any single opponent >= 21
+        const maxSingleIncoming = (() => {
+          let maxVal = 0;
+          Object.keys(roomData.players || {}).forEach(oppId=>{
+            const dmgMap = roomData.players[oppId]?.commanderDamage || {};
+            const val = dmgMap[pid] || 0;
+            if(val > maxVal) maxVal = val;
+          });
+          return maxVal;
+        })();
+        const isEliminated = (p.life <= 0) || (maxSingleIncoming >= 21);
+
+        const outgoingTotal = computeOutgoingTotal(roomData, pid);
+        const outgoingBreakdown = computeOutgoingCmdDamage(roomData, pid);
+
+        let outgoingBreakdownHtml = '<div class="outgoing-cmd-list">';
+        if(outgoingBreakdown.length === 0){
+          outgoingBreakdownHtml += `<div class="outgoing-cmd-item" style="justify-content:center;color:var(--muted)">No opponents yet</div>`;
+        }else{
+          outgoingBreakdown.forEach(item=>{
+            outgoingBreakdownHtml += `<div class="outgoing-cmd-item"><div style="font-weight:700;color:var(--muted)">${item.oppName}: </div><div style="font-weight:900;color:#ffb3b3">${item.dmg}</div></div>`;
+          });
+        }
+        outgoingBreakdownHtml += '</div>';
+
+        // Per-opponent incoming editor (local): always editable
+        let perOppRows = '';
+        const opponents = playerIds.filter(id => id !== pid);
+        opponents.forEach(oppId=>{
+          const dmg = (roomData.players[oppId]?.commanderDamage || {})[pid] || 0;
+          const oppName = roomData.players[oppId]?.name || 'Player';
+          perOppRows += `
+            <div class="per-opp-row" data-target="${pid}" data-opp="${oppId}">
+              <div class="per-opp-left">From <strong>${oppName}</strong></div>
+              <div class="per-opp-controls">
+                <button class="control-btn negative small-btn" data-local-action="cmd-target-sub" data-target="${pid}" data-opp="${oppId}">-</button>
+                <input type="number" value="${dmg}" data-target="${pid}" data-opp="${oppId}" class="cmd-target-input" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--dark-border);background:var(--input-bg);color:var(--text);text-align:center">
+                <button class="control-btn negative small-btn" data-local-action="cmd-target-add" data-target="${pid}" data-opp="${oppId}">+</button>
+              </div>
+            </div>
+          `;
+        });
+
+        const infectControlsHtml = `
+          <div style="display:flex;align-items:center;gap:6px">
+            <button class="control-btn small-btn" data-local-action="infect-sub" data-player="${pid}">-</button>
+            <div class="infect-value" id="local-infect-${pid}">${p.infect || 0}</div>
+            <button class="control-btn small-btn" data-local-action="infect-add" data-player="${pid}">+</button>
+          </div>
+        `;
+
+        let cmdBlockInner = `
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;gap:12px;align-items:center">
+              <div><div class="cmd-label">Outgoing CMD DMG</div></div>
+              <div>
+                <div class="cmd-label">CMD DMG from</div>
+                <div class="cmd-value" id="local-cmd-to-${pid}">${outgoingTotal}</div>
+              </div>
+            </div>
+            ${outgoingBreakdownHtml}
+          </div>
+        `;
+
+        html += `
+          <div class="player-panel${isEliminated ? ' player-eliminated' : ''}" data-player-id="${pid}">
+            <div class="player-header">
+              <div>
+                <div class="player-name">${p.name || 'Player'}</div>
+                <div class="player-sub">Commander: ${p.commanderName || 'N/A'}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                <div class="player-sub">ID: ${pid.slice(0,6)}</div>
+              </div>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <div>
+                <div class="life-big" id="local-life-${pid}">${p.life}</div>
+
+                <div style="margin-top:8px">
+                  <div class="cmd-block">
+                    ${cmdBlockInner}
+                  </div>
+
+                  <div class="infect-block" style="margin-top:8px">
+                    ${infectControlsHtml}
+                  </div>
+                </div>
+              </div>
+
+              <div style="min-width:220px;display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+                <div class="controls" style="flex-direction:column;width:100%">
+                  <div style="display:flex;gap:8px;width:100%;flex-wrap:wrap">
+                    <button class="control-btn negative" data-local-action="life" data-player="${pid}" data-delta="-5">-5</button>
+                    <button class="control-btn negative" data-local-action="life" data-player="${pid}" data-delta="-1">-1</button>
+                    <button class="control-btn positive" data-local-action="life" data-player="${pid}" data-delta="+1">+1</button>
+                    <button class="control-btn positive" data-local-action="life" data-player="${pid}" data-delta="+5">+5</button>
+                  </div>
+                  <div style="display:flex;gap:8px;width:100%;flex-wrap:wrap">
+                    <button class="control-btn" data-local-action="cmd-toggle" data-player="${pid}">CMD DMG</button>
+                    <button class="control-btn" data-local-action="edit-commander" data-player="${pid}">Edit Commander</button>
+                    <button class="control-btn" data-local-action="remove-player" data-player="${pid}">Remove Player</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="cmd-controls" id="local-cmd-controls-${pid}">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="font-weight:700;color:var(--muted);font-size:0.9em">Edit this player's incoming commander damage values</div>
+                <div class="per-opp-container" id="local-per-opp-${pid}">
+                  ${perOppRows}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div>`;
+
+      // Local footer
+      html += `
+        <div id="room-footer">
+          <div class="muted">This local view mirrors the live tracker, but everything stays in your browser.</div>
+          <div class="muted">Tip: Use CMD DMG to track commander damage, and Restart Game to reset life/infect.</div>
+        </div>
+      `;
+
+      container.innerHTML = html;
+
+      // Room-level actions
+      document.getElementById('local-restart-btn').addEventListener('click', ()=>{
+        if(!confirm("Restart game: reset all players' life to default and clear all commander damage and infect?")) return;
+        const data = getLocalData() || roomData;
+        const players = data.players || {};
+        Object.keys(players).forEach(pid=>{
+          players[pid].life = getStartingLife();
+          players[pid].infect = 0;
+          players[pid].commanderDamage = {};
+        });
+        setLocalData(data);
+        alert("Game restarted (local): life reset, commander damage and infect cleared.");
+        renderLocalRoom(data);
+      });
+
+      // Panel actions
+      container.querySelectorAll('.control-btn').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const localAction = btn.dataset.localAction;
+          const pid = btn.dataset.player;
+
+          const data = getLocalData() || roomData;
+          if(!data || !pid) return;
+
+          if(localAction === 'life'){
+            const delta = parseInt(btn.dataset.delta || '0');
+            const next = (data.players[pid].life || getStartingLife()) + delta;
+            data.players[pid].life = next;
+            setLocalData(data);
+            const lifeEl = document.getElementById(`local-life-${pid}`);
+            if(lifeEl) lifeEl.textContent = next;
+            const panel = lifeEl ? lifeEl.closest('.player-panel') : null;
+            if(panel){
+              const maxSingleIncoming = (() => {
+                let maxVal = 0;
+                Object.keys(data.players || {}).forEach(oppId=>{
+                  const dmgMap = data.players[oppId]?.commanderDamage || {};
+                  const val = dmgMap[pid] || 0;
+                  if(val > maxVal) maxVal = val;
+                });
+                return maxVal;
+              })();
+              const eliminatedNow = (next <= 0) || (maxSingleIncoming >= 21);
+              if (eliminatedNow) panel.classList.add('player-eliminated');
+              else panel.classList.remove('player-eliminated');
+            }
+          }
+          else if(localAction === 'infect-add'){
+            data.players[pid].infect = Math.max(0, (data.players[pid].infect || 0) + 1);
+            setLocalData(data);
+            const el = document.getElementById(`local-infect-${pid}`);
+            if(el) el.textContent = data.players[pid].infect;
+          }
+          else if(localAction === 'infect-sub'){
+            data.players[pid].infect = Math.max(0, (data.players[pid].infect || 0) - 1);
+            setLocalData(data);
+            const el = document.getElementById(`local-infect-${pid}`);
+            if(el) el.textContent = data.players[pid].infect;
+          }
+          else if(localAction === 'cmd-toggle'){
+            const controls = document.getElementById(`local-cmd-controls-${pid}`);
+            if(!controls) return;
+            controls.classList.toggle('open');
+          }
+          else if(localAction === 'edit-commander'){
+            const current = data.players[pid].commanderName || '';
+            const next = prompt('Enter commander name:', current || '');
+            if(next !== null){
+              data.players[pid].commanderName = next.trim();
+              setLocalData(data);
+              renderLocalRoom(data);
+            }
+          }
+          else if(localAction === 'remove-player'){
+            if(!confirm(`Remove ${data.players[pid].name || 'player'} from this lobby?`)) return;
+            delete data.players[pid];
+            data.playersOrder = (data.playersOrder || []).filter(id => id !== pid);
+            setLocalData(data);
+            renderLocalRoom(data);
+          }
+        });
+      });
+
+      // Per-opponent editor inputs and +/- (local)
+      container.querySelectorAll('.cmd-target-input').forEach(input=>{
+        input.addEventListener('change', ()=>{
+          const target = input.dataset.target;
+          const opp = input.dataset.opp;
+          const val = Math.max(0, parseInt(input.value || '0'));
+          const data = getLocalData() || roomData;
+          const dmgMap = data.players[opp].commanderDamage || {};
+          dmgMap[target] = val;
+          data.players[opp].commanderDamage = dmgMap;
+          setLocalData(data);
+          renderLocalRoom(data);
+        });
+      });
+      container.querySelectorAll('[data-local-action="cmd-target-add"]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const target = btn.dataset.target;
+          const opp = btn.dataset.opp;
+          const data = getLocalData() || roomData;
+          const dmgMap = data.players[opp].commanderDamage || {};
+          const cur = dmgMap[target] || 0;
+          dmgMap[target] = Math.max(0, cur + 1);
+          data.players[opp].commanderDamage = dmgMap;
+          setLocalData(data);
+          renderLocalRoom(data);
+        });
+      });
+      container.querySelectorAll('[data-local-action="cmd-target-sub"]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const target = btn.dataset.target;
+          const opp = btn.dataset.opp;
+          const data = getLocalData() || roomData;
+          const dmgMap = data.players[opp].commanderDamage || {};
+          const cur = dmgMap[target] || 0;
+          dmgMap[target] = Math.max(0, cur - 1);
+          data.players[opp].commanderDamage = dmgMap;
+          setLocalData(data);
+          renderLocalRoom(data);
+        });
       });
     }
 
@@ -487,9 +893,9 @@
           cardSpan.dataset.cardImageUrl = msg.cardImageUrl;
           cardSpan.dataset.cardName = msg.message;
           messageDiv.appendChild(cardSpan);
-          cardSpan.addEventListener('mouseenter', (e)=>{ showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
-          cardSpan.addEventListener('mouseleave', (e)=>{ hideChatCardPreviewWithDelay(); });
-          cardSpan.addEventListener('click', (e)=>{ const preview = document.getElementById('chat-card-preview'); if(preview.style.display === 'block') hideChatCardPreviewImmediate(); else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          cardSpan.addEventListener('mouseenter', ()=>{ showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
+          cardSpan.addEventListener('mouseleave', ()=>{ hideChatCardPreviewWithDelay(); });
+          cardSpan.addEventListener('click', ()=>{ const preview = document.getElementById('chat-card-preview'); if(preview.style.display === 'block') hideChatCardPreviewImmediate(); else showChatCardPreview(cardSpan.dataset.cardImageUrl, cardSpan.dataset.cardName); });
         } else {
           messageDiv.appendChild(document.createTextNode(' ' + msg.message));
         }
@@ -648,7 +1054,6 @@
               </div>
               <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
                 ${isMe ? `<div class="you-badge">YOU</div>` : `<div class="player-sub">ID: ${playerId.slice(0,6)}</div>`}
-                <div class="player-sub" style="font-size:.85rem">Life</div>
               </div>
             </div>
 
@@ -720,6 +1125,7 @@
         </div>
       `;
 
+      // Use the existing appContainer declared at the top of the function (no redeclaration)
       appContainer.innerHTML = html;
 
       // render chat
@@ -1225,6 +1631,7 @@
       const page = (location.hash || '#home').replace('#','') || 'home';
       setActiveNav(page);
       if(page === 'home') renderHome();
+      else if(page === 'local') renderLocal();
       else if(page === 'changes') renderChanges();
       else if(page === 'contact') renderContact();
     }
