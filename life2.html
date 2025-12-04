@@ -45,12 +45,12 @@
 
         // --- Configuration & Global Variables ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-          apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
-          authDomain: "mtg-life-tool.firebaseapp.com",
-          projectId: "mtg-life-tool",
-          storageBucket: "mtg-life-tool.appspot.com",
-          messagingSenderId: "36730058988",
-          appId: "1:36730058988:web:757e2d9620593b4f65022a"
+      apiKey: "AIzaSyA_mz_fVsph8VHfCEG__9sWg_ZvwYX5_6E",
+      authDomain: "mtg-life-tool.firebaseapp.com",
+      projectId: "mtg-life-tool",
+      storageBucket: "mtg-life-tool.appspot.com",
+      messagingSenderId: "36730058988",
+      appId: "1:36730058988:web:757e2d9620593b4f65022a"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -87,7 +87,9 @@
             Droplet: (p) => <Icon {...p} path={<path d="M12 22a7 7 0 0 0 7-7c0-2-2-3-2-3L12 2 7 12s-2 1-2 3a7 7 0 0 0 7 7z"/>} />,
             RotateCw: (p) => <Icon {...p} path={<><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></>} />,
             Lock: (p) => <Icon {...p} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>} />,
-            Unlock: (p) => <Icon {...p} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>} />
+            Unlock: (p) => <Icon {...p} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></>} />,
+            Share: (p) => <Icon {...p} path={<><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></>} />,
+            Copy: (p) => <Icon {...p} path={<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>} />
         };
 
         // --- Gemini API Utility ---
@@ -639,6 +641,7 @@
             const [joinedRoom, setJoinedRoom] = useState(null);
             const [error, setError] = useState('');
             const [players, setPlayers] = useState([]);
+            const [showCopiedToast, setShowCopiedToast] = useState(false);
             
             // Lobby State
             const [rooms, setRooms] = useState([]);
@@ -648,13 +651,18 @@
             const [joinPassword, setJoinPassword] = useState('');
             const [selectedRoomId, setSelectedRoomId] = useState(null);
             
-            // Fetch Rooms for Lobby
+            // Fetch Rooms for Lobby & Check Query Params
             useEffect(() => {
-                if(joinedRoom) return; // Don't fetch if already in game
+                if(joinedRoom) return; 
                 
-                // Simple query: All rooms
+                // Check query param for room
+                const params = new URLSearchParams(window.location.search);
+                const roomParam = params.get('room');
+                if (roomParam) {
+                    setSelectedRoomId(roomParam);
+                }
+
                 const roomsRef = collection(db, 'artifacts', appId, 'public', 'data', 'rooms');
-                // We'll just fetch all and filter client side if needed, keeping rule 2 in mind
                 const unsub = onSnapshot(roomsRef, (snap) => {
                     const r = [];
                     snap.forEach(d => r.push({id: d.id, ...d.data()}));
@@ -687,7 +695,7 @@
                     
                     await setDoc(roomRef, { 
                         name: hostName, 
-                        password: hostPassword, // Store password
+                        password: hostPassword, 
                         createdAt: serverTimestamp(), 
                         players: [playerData], 
                         log: [] 
@@ -708,7 +716,6 @@
                     return;
                 }
 
-                // Check password if selecting from list
                 const roomData = rooms.find(r => r.id === rName);
                 if (roomData && roomData.password && roomData.password !== joinPassword) {
                     setError("Incorrect Password");
@@ -716,6 +723,19 @@
                 }
 
                 setJoinedRoom(rName);
+            };
+
+            const copyRoomLink = () => {
+                const url = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(joinedRoom)}`;
+                const el = document.createElement('textarea');
+                el.value = url;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                
+                setShowCopiedToast(true);
+                setTimeout(() => setShowCopiedToast(false), 2000);
             };
 
             // In-Game Logic
@@ -728,11 +748,8 @@
                         let currentPlayers = data.players || [];
                         const amIIn = currentPlayers.find(p => p.id === user.uid);
                         
-                        // If not in, add me
                         if (!amIIn) {
-                            // Check password again if it was a direct join (rare but safe)
                             if (data.password && data.password !== joinPassword && !selectedRoomId) {
-                                // If we joined by typing name and didn't know password
                                 setError("Room is locked.");
                                 setJoinedRoom(null);
                                 return;
@@ -740,7 +757,7 @@
 
                             const newPlayer = { 
                                 id: user.uid, 
-                                name: playerName || `Player ${currentPlayers.length + 1}`, // Fallback
+                                name: playerName || `Player ${currentPlayers.length + 1}`, 
                                 life: 40, 
                                 commander: null, 
                                 isDead: false,
@@ -769,12 +786,27 @@
             // Game View
             if (joinedRoom) {
                 return (
-                    <div className="h-full flex flex-col">
+                    <div className="h-full flex flex-col relative">
+                        {/* Copied Toast */}
+                        {showCopiedToast && (
+                            <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded-full shadow-lg z-50 animate-bounce">
+                                Link Copied!
+                            </div>
+                        )}
+
                         <div className="bg-slate-900 p-4 border-b border-slate-700 flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <Icons.Wifi className="text-green-500 w-4 h-4 animate-pulse" />
-                                <span className="text-white font-bold">Room: {joinedRoom}</span>
-                                <span className="text-slate-500 text-sm">({players.length} Players)</span>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <Icons.Wifi className="text-green-500 w-4 h-4 animate-pulse" />
+                                    <span className="text-white font-bold">{joinedRoom}</span>
+                                    <span className="text-slate-500 text-sm">({players.length})</span>
+                                </div>
+                                <button 
+                                    onClick={copyRoomLink} 
+                                    className="flex items-center gap-1 text-xs bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-3 py-1.5 rounded-full transition-colors font-medium border border-purple-500/50"
+                                >
+                                    <Icons.Share className="w-3 h-3" /> Share Room
+                                </button>
                             </div>
                             <button onClick={() => { setJoinedRoom(null); onLeave(); }} className="text-red-400 hover:text-red-300 text-sm font-medium">Leave Room</button>
                         </div>
@@ -953,6 +985,7 @@
                         <li><strong className="text-slate-200">Active Room Browser:</strong> You can now see a list of live rooms in the online lobby.</li>
                         <li><strong className="text-slate-200">Room Passwords:</strong> Hosts can now set a password for their rooms to keep games private.</li>
                         <li><strong className="text-slate-200">Display Names:</strong> You can now set a custom player name when joining or hosting. This name appears above your Commander.</li>
+                        <li><strong className="text-slate-200">Share Rooms:</strong> While in a game, click "Share Room" to copy a direct join link to your clipboard.</li>
                     </ul>
                 </div>
                 {/* ... existing changelogs ... */}
