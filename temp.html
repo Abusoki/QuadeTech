@@ -483,7 +483,7 @@
             if (loading) return <div className="flex items-center justify-center h-full text-slate-400">Loading Stats...</div>;
 
             return (
-                <div className="p-4 md:p-8 max-w-6xl mx-auto h-full overflow-y-auto scroll-container">
+                <div className="absolute inset-0 flex flex-col p-4 md:p-8 overflow-y-auto scroll-container pb-24">
                     <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
                         <Icons.BarChart2 className="w-8 h-8 text-purple-500" />
                         Meta Statistics
@@ -718,7 +718,7 @@
 
         // 7. Contact Page (Unchanged)
         const ContactPage = () => (
-             <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+             <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500 scroll-container overflow-y-auto pb-24">
                 <div className="bg-slate-900/50 backdrop-blur-lg p-8 rounded-2xl border border-slate-700 shadow-2xl max-w-md w-full">
                     <div className="w-16 h-16 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-6"><Icons.Mail className="w-8 h-8 text-purple-500" /></div>
                     <h1 className="text-3xl font-bold text-white mb-2">Get in Touch</h1>
@@ -1047,8 +1047,9 @@
 
             const isHost = players.length > 0 && players[0].id === user.uid;
 
-            // --- Calculate Winner ---
+            // --- WINNER LOGIC RESTORED ---
             const activePlayers = players.filter(p => !p.isDead);
+            // Winner condition: Only 1 active player left, and there were originally >1 players.
             const winnerId = (activePlayers.length === 1 && players.length > 1) ? activePlayers[0].id : null;
 
             // Heartbeat
@@ -1155,6 +1156,7 @@
                                         {...p} 
                                         players={players} 
                                         isLocal={false}
+                                        // --- WINNER PROP RESTORED ---
                                         isWinner={p.id === winnerId}
                                         color={p.id === user.uid ? 'bg-slate-800 ring-2 ring-purple-500' : 'bg-slate-800'} 
                                         onUpdate={(id, updates) => { if (id === user.uid) updateSelf(updates); }} 
@@ -1169,7 +1171,7 @@
             }
 
             return (
-                <div className="h-full flex flex-col p-4 md:p-8 overflow-y-auto relative scroll-container">
+                <div className="absolute inset-0 flex flex-col p-4 md:p-8 overflow-y-auto scroll-container pb-24">
                     <button onClick={() => setShowCardSearch(true)} className="absolute top-4 right-4 md:right-8 bg-slate-800 hover:bg-slate-700 text-white p-2 rounded-full shadow-lg border border-slate-600 transition-colors z-20 flex items-center gap-2 px-4">
                         <Icons.Search className="w-4 h-4 text-purple-400" />
                         <span className="text-sm font-bold">Card Database</span>
@@ -1253,7 +1255,7 @@
 
         // 9. Changelog
         const Changelog = () => (
-            <div className="p-8 max-w-3xl mx-auto text-slate-300 space-y-8 h-full overflow-y-auto scroll-container">
+            <div className="absolute inset-0 p-8 max-w-3xl mx-auto text-slate-300 space-y-8 h-full overflow-y-auto scroll-container pb-24">
                 <h1 className="text-3xl font-bold text-white mb-8">Patch Notes</h1>
                 <div className="relative pl-8 border-l-2 border-slate-700">
                     <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-purple-500 ring-4 ring-slate-900" />
