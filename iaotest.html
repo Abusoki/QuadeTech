@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iron & Oil</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel for JSX compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Import Map: Tells the browser where to find imports -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "firebase/app": "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js",
+            "firebase/auth": "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js",
+            "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js",
+            "lucide-react": "https://esm.sh/lucide-react@0.263.1?external=react"
+        }
+    }
+    </script>
+
+    <style>
+        /* Custom Animations */
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
+        /* Hide scrollbar for clean UI in log */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { initializeApp } from 'firebase/app';
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            onAuthStateChanged,
+            signInWithCustomToken
+        } from 'firebase/auth';
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            setDoc, 
+            deleteDoc, 
+            updateDoc, 
+            onSnapshot 
+        } from 'firebase/firestore';
+        import { 
+            Shield, Sword, Heart, Zap, UserPlus, Backpack, 
+            ChevronRight, User, AlertTriangle, Clock, X, 
+            Hammer, Scroll, Skull, Repeat, PauseCircle 
+        } from 'lucide-react';
+
+        // ------------------------------------------------------------------
+        // CONFIGURATION
+        // ------------------------------------------------------------------
+        let firebaseConfig;
+        let appId = 'iron-and-oil-web';
+
+        // Check if running in the AI Preview Environment
+        if (typeof __firebase_config !== 'undefined') {
+            firebaseConfig = JSON.parse(__firebase_config);
+            if (typeof __app_id !== 'undefined') {
+                appId = __app_id;
+            }
+        } else {
+            // MANUAL CONFIGURATION: Paste your keys here for external deployment
+            firebaseConfig = {
+                // apiKey: "AIzaSy...",
+                // authDomain: "your-project.firebaseapp.com",
+                // projectId: "your-project",
+                // storageBucket: "your-project.appspot.com",
+                // messagingSenderId: "123456789",
+                // appId: "1:123456789:web:abcdef"
+            };
+        }
+        // ------------------------------------------------------------------
+
+        // Fallback if config is missing
+        if (!firebaseConfig || !firebaseConfig.apiKey) {
+            console.error("FIREBASE CONFIG MISSING: If running locally, edit index.html to add your config.");
+        }
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- Constants & Game Data ---
+        const BASE_STATS_RANGE = {
+            hp: [90, 110], ap: [8, 12], def: [1, 3], spd: [8, 12]
+        };
+
+        const RACES = {
+            Human: { hpMod: 1.0, apMod: 1.0, defMod: 1.0, spdMod: 1.0, desc: "Balanced and adaptable." },
+            Elf: { hpMod: 0.8, apMod: 1.2, defMod: 0.8, spdMod: 1.4, desc: "Fast, high AP, fragile." },
+            Urblosh: { hpMod: 1.5, apMod: 1.0, defMod: 1.5, spdMod: 0.6, desc: "Rock skin, oil blood. Tanky but slow." }
+        };
+
+        const CLASSES = {
+            Warrior: { hpMod: 1.2, apMod: 1.0, defMod: 1.2, spdMod: 0.9 },
+            Archer: { hpMod: 0.9, apMod: 1.3, defMod: 0.8, spdMod: 1.1 },
+            Assassin: { hpMod: 0.8, apMod: 1.2, defMod: 0.8, spdMod: 1.5 }
+        };
+
+        const MAX_TROOPS = 3;
+        const MAX_LEVEL = 5;
+        const LEVEL_XP_CURVE = [0, 100, 250, 500, 1000, 9999];
+        const TAVERN_REFRESH_MS = 4 * 60 * 60 * 1000;
+        const NAMES = ["Kael", "Thar", "Olg", "Brim", "Syl", "Vex", "Dorn", "Lira", "Mok", "Zed", "Grom", "Fae", "Urk", "Zil"];
+
+        // --- Helper Functions ---
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+        const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+        const getEffectiveStats = (unit, equippedItems = []) => {
+            if (!unit) return {};
+            const levelBonus = (unit.level - 1);
+            let stats = {
+                maxHp: Math.floor(unit.baseStats.hp + (levelBonus * 10)),
+                ap: Math.floor(unit.baseStats.ap + (levelBonus * 2)),
+                def: Math.floor(unit.baseStats.def + (levelBonus * 1)),
+                spd: Math.floor(unit.baseStats.spd + (levelBonus * 1)),
+            };
+            equippedItems.forEach(item => {
+                if (item.stats) {
+                    if (item.stats.maxHp) stats.maxHp += item.stats.maxHp;
+                    if (item.stats.ap) stats.ap += item.stats.ap;
+                    if (item.stats.def) stats.def += item.stats.def;
+                    if (item.stats.spd) stats.spd += item.stats.spd;
+                }
+            });
+            stats.maxHp = Math.max(1, stats.maxHp);
+            stats.ap = Math.max(1, stats.ap);
+            return stats;
+        };
+
+        const generateRecruit = () => {
+            const races = Object.keys(RACES);
+            const classes = Object.keys(CLASSES);
+            const raceKey = races[Math.floor(Math.random() * races.length)];
+            const classKey = classes[Math.floor(Math.random() * classes.length)];
+            const rMod = RACES[raceKey];
+            const cMod = CLASSES[classKey];
+
+            const rawHp = randomInt(BASE_STATS_RANGE.hp[0], BASE_STATS_RANGE.hp[1]);
+            const rawAp = randomInt(BASE_STATS_RANGE.ap[0], BASE_STATS_RANGE.ap[1]);
+            const rawDef = randomInt(BASE_STATS_RANGE.def[0], BASE_STATS_RANGE.def[1]);
+            const rawSpd = randomInt(BASE_STATS_RANGE.spd[0], BASE_STATS_RANGE.spd[1]);
+
+            const baseHp = Math.floor(rawHp * rMod.hpMod * cMod.hpMod);
+            const baseAp = Math.floor(rawAp * rMod.apMod * cMod.apMod);
+            const baseDef = Math.floor(rawDef * rMod.defMod * cMod.defMod);
+            const baseSpd = Math.floor(rawSpd * rMod.spdMod * cMod.spdMod);
+
+            return {
+                id: generateId(),
+                name: NAMES[Math.floor(Math.random() * NAMES.length)],
+                race: raceKey,
+                class: classKey,
+                level: 1,
+                xp: 0,
+                currentHp: baseHp,
+                baseStats: { hp: baseHp, ap: baseAp, def: baseDef, spd: baseSpd },
+                equipment: { mainHand: null },
+                lore: { missionsWon: 0, kills: 0, closeCalls: 0 }
+            };
+        };
+
+        const AuthScreen = () => (
+            <div className="flex items-center justify-center h-screen bg-slate-900 text-slate-200">
+                <div className="text-center animate-pulse">
+                    <Shield className="w-16 h-16 mx-auto mb-4 text-amber-600" />
+                    <h1 className="text-2xl font-bold">Entering the Realm...</h1>
+                    <p className="text-slate-500">Connecting to Guild Archives</p>
+                    {!firebaseConfig || !firebaseConfig.apiKey && <p className="text-red-500 mt-4 text-sm font-mono max-w-md mx-auto">Error: Firebase Config Missing. If running locally, please edit the HTML file to include your API keys.</p>}
+                </div>
+            </div>
+        );
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [view, setView] = useState('barracks'); 
+            const [troops, setTroops] = useState([]);
+            const [inventory, setInventory] = useState([]);
+            const [gold, setGold] = useState(0);
+            const [tavernState, setTavernState] = useState({ recruits: [], nextRefresh: 0 });
+            const [selectedUnitId, setSelectedUnitId] = useState(null);
+            const [combatLog, setCombatLog] = useState([]);
+            const [gameState, setGameState] = useState('idle');
+            const [selectedTroops, setSelectedTroops] = useState([]);
+            const [enemies, setEnemies] = useState([]);
+            const [battleTick, setBattleTick] = useState(0);
+            const [autoBattle, setAutoBattle] = useState(false);
+            
+            const combatStateRef = useRef({ troops: [], enemies: [], active: false });
+            const troopsRef = useRef(troops);
+
+            useEffect(() => { troopsRef.current = troops; }, [troops]);
+
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (err) {
+                        console.error("Auth failed:", err);
+                    }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+
+                const unsubTroops = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'troops'), (snap) => {
+                    const t = [];
+                    snap.forEach(doc => t.push({ ...doc.data(), uid: doc.id }));
+                    setTroops(t);
+                });
+
+                const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+                const unsubProfile = onSnapshot(profileRef, (snap) => {
+                    if (snap.exists()) {
+                        setInventory(snap.data().inventory || []);
+                        setGold(snap.data().gold || 100);
+                    } else {
+                        setDoc(profileRef, { inventory: [], gold: 100 });
+                    }
+                });
+
+                const tavernRef = doc(db, 'artifacts', appId, 'users', user.uid, 'system', 'tavern');
+                const unsubTavern = onSnapshot(tavernRef, (snap) => {
+                    if (snap.exists()) {
+                        setTavernState(snap.data());
+                    } else {
+                        refreshTavern(tavernRef);
+                    }
+                });
+
+                return () => { unsubTroops(); unsubProfile(); unsubTavern(); };
+            }, [user]);
+
+            const refreshTavern = async (ref) => {
+                const newRecruits = Array.from({ length: 5 }, () => generateRecruit());
+                const nextRefresh = Date.now() + TAVERN_REFRESH_MS;
+                await setDoc(ref, { recruits: newRecruits, nextRefresh });
+            };
+
+            const checkTavernRefresh = async () => {
+                if (Date.now() > tavernState.nextRefresh) {
+                    const tavernRef = doc(db, 'artifacts', appId, 'users', user.uid, 'system', 'tavern');
+                    await refreshTavern(tavernRef);
+                }
+            };
+
+            const recruitUnit = async (recruit) => {
+                if (troops.length >= MAX_TROOPS) return;
+                const updatedRecruits = tavernState.recruits.filter(r => r.id !== recruit.id);
+                const tavernRef = doc(db, 'artifacts', appId, 'users', user.uid, 'system', 'tavern');
+                const newUnitRef = doc(db, 'artifacts', appId, 'users', user.uid, 'troops', generateId());
+                const { id, ...unitData } = recruit;
+                await Promise.all([
+                    updateDoc(tavernRef, { recruits: updatedRecruits }),
+                    setDoc(newUnitRef, unitData)
+                ]);
+                setView('barracks');
+            };
+
+            const equipItem = async (unit, item) => {
+                if (!unit || !item) return;
+                let newInventory = [...inventory];
+                newInventory = newInventory.filter(i => i.id !== item.id);
+                let oldItem = unit.equipment.mainHand ? unit.equipment.mainHand : null;
+                if (oldItem) newInventory.push(oldItem);
+                const unitRef = doc(db, 'artifacts', appId, 'users', user.uid, 'troops', unit.uid);
+                const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+                await Promise.all([
+                    updateDoc(unitRef, { "equipment.mainHand": item }),
+                    updateDoc(profileRef, { inventory: newInventory })
+                ]);
+            };
+
+            const unequipItem = async (unit) => {
+                if (!unit || !unit.equipment.mainHand) return;
+                const item = unit.equipment.mainHand;
+                const newInventory = [...inventory, item];
+                const unitRef = doc(db, 'artifacts', appId, 'users', user.uid, 'troops', unit.uid);
+                const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+                await Promise.all([
+                    updateDoc(unitRef, { "equipment.mainHand": null }),
+                    updateDoc(profileRef, { inventory: newInventory })
+                ]);
+            };
+
+            const startMission = useCallback(() => {
+                const currentTroops = troopsRef.current;
+                const validSelectedIds = selectedTroops.filter(id => currentTroops.find(t => t.uid === id));
+                
+                if (validSelectedIds.length === 0) {
+                    setAutoBattle(false);
+                    setCombatLog(prev => [...prev, "Auto-Battle Stopped: Squad wiped out."]);
+                    return;
+                }
+                if (validSelectedIds.length > 2) return;
+                
+                const enemyCount = Math.floor(Math.random() * 4) + 1;
+                const newEnemies = Array.from({ length: enemyCount }, (_, i) => ({
+                    id: `blob_${i}`,
+                    name: `Bloblin ${i+1}`,
+                    maxHp: 40,
+                    currentHp: 40,
+                    ap: 8, def: 0, spd: 8,
+                    actionGauge: Math.random() * 50
+                }));
+
+                const fightingTroops = currentTroops
+                    .filter(t => validSelectedIds.includes(t.uid))
+                    .map(t => {
+                        const stats = getEffectiveStats(t, t.equipment.mainHand ? [t.equipment.mainHand] : []);
+                        return {
+                            ...t, ...stats,
+                            currentHp: Math.min(t.currentHp, stats.maxHp),
+                            actionGauge: 0,
+                            battleKills: 0
+                        };
+                    });
+
+                setEnemies(newEnemies);
+                setCombatLog(["Combat Started!", `Encountered ${enemyCount} Bloblins!`]);
+                setGameState('fighting');
+                setView('combat');
+                combatStateRef.current = { troops: fightingTroops, enemies: newEnemies, active: true };
+            }, [selectedTroops]);
+
+            useEffect(() => {
+                if (gameState === 'victory' && autoBattle) {
+                    const timer = setTimeout(() => {
+                        if (view === 'combat' && autoBattle) {
+                           startMission();
+                        }
+                    }, 2500);
+                    return () => clearTimeout(timer);
+                }
+            }, [gameState, autoBattle, view, startMission]);
+
+            useEffect(() => {
+                if (gameState !== 'fighting') {
+                    combatStateRef.current.active = false;
+                    return;
+                }
+
+                const timer = setInterval(() => {
+                    if (!combatStateRef.current.active) return;
+                    const state = combatStateRef.current;
+                    let logUpdates = [];
+                    let battleOver = false;
+
+                    [...state.troops, ...state.enemies].forEach(u => {
+                        if (u.currentHp > 0) u.actionGauge += u.spd;
+                    });
+
+                    const actors = [...state.troops, ...state.enemies]
+                        .filter(u => u.currentHp > 0 && u.actionGauge >= 100)
+                        .sort((a, b) => b.actionGauge - a.actionGauge);
+
+                    actors.forEach(actor => {
+                        if (battleOver || actor.currentHp <= 0) return;
+                        actor.actionGauge -= 100;
+
+                        const isPlayer = !!actor.uid;
+                        const targets = isPlayer ? state.enemies : state.troops;
+                        const liveTargets = targets.filter(t => t.currentHp > 0);
+
+                        if (liveTargets.length === 0) {
+                            battleOver = true;
+                            return;
+                        }
+
+                        const target = liveTargets[Math.floor(Math.random() * liveTargets.length)];
+                        const multiplier = 0.8 + Math.random() * 0.4;
+                        const rawDmg = (actor.ap * multiplier) - target.def;
+                        const finalDmg = Math.max(1, Math.floor(rawDmg));
+
+                        target.currentHp -= finalDmg;
+                        logUpdates.push(`${actor.name} hits ${target.name} for ${finalDmg}`);
+
+                        if (target.currentHp <= 0) {
+                            logUpdates.push(`☠️ ${target.name} died!`);
+                            if (isPlayer) actor.battleKills = (actor.battleKills || 0) + 1;
+                        }
+                    });
+
+                    setEnemies([...state.enemies]);
+                    setBattleTick(prev => prev + 1);
+                    setCombatLog(prev => [...prev, ...logUpdates].slice(-8));
+
+                    const aliveTroops = state.troops.filter(t => t.currentHp > 0);
+                    const aliveEnemies = state.enemies.filter(t => t.currentHp > 0);
+
+                    if (aliveTroops.length === 0) {
+                        combatStateRef.current.active = false;
+                        handleDefeat(state.troops);
+                        battleOver = true;
+                    } else if (aliveEnemies.length === 0) {
+                        combatStateRef.current.active = false;
+                        handleVictory(state.troops);
+                        battleOver = true;
+                    }
+                }, 600);
+                return () => clearInterval(timer);
+            }, [gameState]);
+
+            const handleVictory = async (survivors) => {
+                setGameState('victory');
+                setCombatLog(prev => [...prev, "VICTORY! Found Dull Sword."]);
+                const xpGain = 20;
+                const loot = { id: generateId(), name: "Dull Sword", type: 'weapon', stats: { ap: 2, maxHp: -5 } };
+                const updates = survivors.map(async (unit) => {
+                    if (unit.currentHp <= 0) {
+                        await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'troops', unit.uid));
+                        return;
+                    }
+                    let newXp = unit.xp + xpGain;
+                    let newLevel = unit.level;
+                    if (newLevel < MAX_LEVEL && newXp >= LEVEL_XP_CURVE[newLevel]) newLevel++;
+                    
+                    const effectiveStats = getEffectiveStats({ ...unit, level: newLevel }, unit.equipment?.mainHand ? [unit.equipment.mainHand] : []);
+                    const newHp = Math.min(effectiveStats.maxHp, unit.currentHp + 10);
+                    
+                    const currentLore = unit.lore || { missionsWon: 0, kills: 0, closeCalls: 0 };
+                    const killsThisBattle = unit.battleKills || 0;
+                    const hpPct = unit.currentHp / effectiveStats.maxHp;
+                    const isCloseCall = hpPct <= 0.05 && hpPct > 0;
+
+                    const newLore = {
+                        missionsWon: (currentLore.missionsWon || 0) + 1,
+                        kills: (currentLore.kills || 0) + killsThisBattle,
+                        closeCalls: (currentLore.closeCalls || 0) + (isCloseCall ? 1 : 0)
+                    };
+
+                    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'troops', unit.uid), {
+                        xp: newXp, level: newLevel, currentHp: newHp, lore: newLore
+                    });
+                });
+                await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data'), {
+                    gold: gold + 15, inventory: [...inventory, loot]
+                });
+                await Promise.all(updates);
+            };
+
+            const handleDefeat = async (party) => {
+                setGameState('defeat');
+                setAutoBattle(false);
+                const deletions = party.map(u => deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'troops', u.uid)));
+                await Promise.all(deletions);
+            };
+
+            const getHpBar = (curr, max) => {
+                const pct = Math.max(0, Math.min(100, (curr / max) * 100));
+                return (
+                    <div className="w-full h-1.5 bg-slate-700 rounded-full mt-1 overflow-hidden">
+                        <div className={`h-full ${pct < 30 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                );
+            };
+
+            const selectedUnit = troops.find(t => t.uid === selectedUnitId);
+            if (!user) return <AuthScreen />;
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-amber-900">
+                    <header className="bg-slate-800 border-b border-slate-700 p-3 sticky top-0 z-20 flex justify-between items-center shadow-md">
+                        <div className="flex items-center gap-2 text-amber-500">
+                            <Shield className="fill-current w-5 h-5" />
+                            <span className="font-bold tracking-wider">IRON & OIL</span>
+                        </div>
+                        <div className="flex gap-4 text-sm font-mono">
+                            <span className="text-yellow-400">🪙 {gold}</span>
+                            <span className="text-blue-300 flex items-center gap-1"><Backpack size={14}/> {inventory.length}</span>
+                        </div>
+                    </header>
+                    <main className="p-4 max-w-2xl mx-auto pb-24">
+                        {view === 'barracks' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h2 className="text-lg font-bold text-slate-300">Roster ({troops.length}/{MAX_TROOPS})</h2>
+                                    <button 
+                                        onClick={() => { checkTavernRefresh(); setView('tavern'); }}
+                                        disabled={troops.length >= MAX_TROOPS}
+                                        className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 px-3 py-1.5 rounded text-sm font-bold flex items-center gap-2"
+                                    >
+                                        <UserPlus size={16} /> Recruit
+                                    </button>
+                                </div>
+                                {troops.length === 0 ? (
+                                    <div className="text-center p-8 border border-dashed border-slate-700 rounded-lg text-slate-500">
+                                        No troops. The tavern awaits.
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-3">
+                                        {troops.map(t => {
+                                           const stats = getEffectiveStats(t, t.equipment.mainHand ? [t.equipment.mainHand] : []);
+                                           return (
+                                            <div key={t.uid} onClick={() => { setSelectedUnitId(t.uid); setView('character_sheet'); }} className="bg-slate-800 p-3 rounded-lg border border-slate-700 hover:border-amber-500/50 cursor-pointer transition-all flex justify-between items-center">
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-xs font-bold bg-slate-700 px-1.5 rounded text-slate-300">{t.race} {t.class}</span>
+                                                        <span className="text-xs text-amber-500 font-mono">Lvl {t.level}</span>
+                                                    </div>
+                                                    <h3 className="font-bold">{t.name}</h3>
+                                                    <div className="flex gap-3 text-xs text-slate-400 mt-1">
+                                                        <span className="flex items-center gap-1"><Heart size={10} className="text-red-400"/> {t.currentHp}/{stats.maxHp}</span>
+                                                        <span className="flex items-center gap-1"><Sword size={10}/> {stats.ap}</span>
+                                                    </div>
+                                                </div>
+                                                <ChevronRight className="text-slate-600" />
+                                            </div>
+                                           );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {view === 'character_sheet' && selectedUnit && (
+                            <div className="space-y-4 animate-fade-in">
+                                <button onClick={() => setView('barracks')} className="text-slate-400 hover:text-white flex items-center gap-1 text-sm mb-2"><ChevronRight className="rotate-180 w-4 h-4" /> Back to Barracks</button>
+                                <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+                                    <div className="p-4 bg-slate-900/50 border-b border-slate-700 flex justify-between items-start">
+                                        <div>
+                                            <h2 className="text-2xl font-bold text-white">{selectedUnit.name}</h2>
+                                            <p className="text-slate-400 text-sm">{selectedUnit.race} {selectedUnit.class}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-2xl font-mono text-amber-500">Lvl {selectedUnit.level}</div>
+                                            <div className="text-xs text-slate-500">XP: {selectedUnit.xp} / {LEVEL_XP_CURVE[selectedUnit.level]}</div>
+                                        </div>
+                                    </div>
+                                    <div className="p-4 grid grid-cols-2 gap-4">
+                                        {(() => {
+                                            const stats = getEffectiveStats(selectedUnit, selectedUnit.equipment.mainHand ? [selectedUnit.equipment.mainHand] : []);
+                                            return (
+                                                <>
+                                                    <div className="bg-slate-900 p-3 rounded border border-slate-700"><div className="text-xs text-slate-500 uppercase flex items-center gap-1"><Heart size={12}/> Health</div><div className="text-xl font-bold text-red-400">{selectedUnit.currentHp} <span className="text-slate-500 text-sm">/ {stats.maxHp}</span></div></div>
+                                                    <div className="bg-slate-900 p-3 rounded border border-slate-700"><div className="text-xs text-slate-500 uppercase flex items-center gap-1"><Sword size={12}/> Attack</div><div className="text-xl font-bold text-orange-400">{stats.ap}</div></div>
+                                                    <div className="bg-slate-900 p-3 rounded border border-slate-700"><div className="text-xs text-slate-500 uppercase flex items-center gap-1"><Shield size={12}/> Defense</div><div className="text-xl font-bold text-blue-400">{stats.def}</div></div>
+                                                    <div className="bg-slate-900 p-3 rounded border border-slate-700"><div className="text-xs text-slate-500 uppercase flex items-center gap-1"><Zap size={12}/> Speed</div><div className="text-xl font-bold text-yellow-400">{stats.spd}</div></div>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                    <div className="p-4 border-t border-slate-700">
+                                        <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">Equipment</h3>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-16 h-16 bg-slate-900 border border-slate-600 rounded flex items-center justify-center">{selectedUnit.equipment.mainHand ? <Sword className="text-slate-300"/> : <span className="text-xs text-slate-600">Empty</span>}</div>
+                                            <div className="flex-1">
+                                                {selectedUnit.equipment.mainHand ? (
+                                                    <div className="flex justify-between items-center"><div><div className="font-bold text-amber-200">{selectedUnit.equipment.mainHand.name}</div><div className="text-xs text-slate-400">{selectedUnit.equipment.mainHand.stats.ap > 0 && `+${selectedUnit.equipment.mainHand.stats.ap} AP `}{selectedUnit.equipment.mainHand.stats.maxHp < 0 && `${selectedUnit.equipment.mainHand.stats.maxHp} HP `}</div></div><button onClick={() => unequipItem(selectedUnit)} className="text-xs bg-slate-700 px-2 py-1 rounded">Unequip</button></div>
+                                                ) : <div className="text-sm text-slate-500 italic">No weapon equipped</div>}
+                                            </div>
+                                        </div>
+                                        {!selectedUnit.equipment.mainHand && inventory.filter(i => i.type === 'weapon').length > 0 && (
+                                            <div className="mt-4"><p className="text-xs text-slate-400 mb-2">Equip from Inventory:</p><div className="grid gap-2">{inventory.filter(i => i.type === 'weapon').map((item, idx) => (<button key={idx} onClick={() => equipItem(selectedUnit, item)} className="flex items-center justify-between bg-slate-900 p-2 rounded border border-slate-700 hover:border-amber-500 text-left"><span className="text-sm">{item.name}</span><span className="text-xs text-slate-500">{item.stats.ap > 0 && `+${item.stats.ap} AP `}{item.stats.maxHp !== 0 && `${item.stats.maxHp} HP`}</span></button>))}</div></div>
+                                        )}
+                                    </div>
+                                    <div className="p-4 border-t border-slate-700 bg-slate-900/30">
+                                        <h3 className="text-sm font-bold text-amber-500 mb-3 uppercase tracking-wider flex items-center gap-2"><Scroll size={14} /> Service Record</h3>
+                                        <div className="grid grid-cols-3 gap-2 text-center">
+                                            <div className="bg-slate-800 p-2 rounded border border-slate-700"><div className="text-2xl font-bold text-slate-200">{selectedUnit.lore?.missionsWon || 0}</div><div className="text-[10px] text-slate-500 uppercase">Missions Won</div></div>
+                                            <div className="bg-slate-800 p-2 rounded border border-slate-700"><div className="text-2xl font-bold text-red-400">{selectedUnit.lore?.kills || 0}</div><div className="text-[10px] text-slate-500 uppercase flex items-center justify-center gap-1"><Skull size={10} /> Kills</div></div>
+                                            <div className="bg-slate-800 p-2 rounded border border-slate-700"><div className="text-2xl font-bold text-amber-200">{selectedUnit.lore?.closeCalls || 0}</div><div className="text-[10px] text-slate-500 uppercase" title="Survived with < 5% HP">Close Calls</div></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {view === 'tavern' && (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2"><button onClick={() => setView('barracks')} className="text-slate-400 hover:text-white"><ChevronRight className="rotate-180" /></button><h2 className="text-xl font-bold">The Rusty Flagon</h2></div>
+                                    <div className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-400 flex items-center gap-1"><Clock size={12} /> New recruits in {Math.max(0, Math.floor((tavernState.nextRefresh - Date.now()) / 60000))}m</div>
+                                </div>
+                                <div className="grid gap-4">
+                                    {tavernState.recruits && tavernState.recruits.length > 0 ? (
+                                        tavernState.recruits.map(recruit => (
+                                            <div key={recruit.id} className="bg-slate-800 p-4 rounded-lg border border-slate-700 relative overflow-hidden">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-1"><span className="text-xs font-bold uppercase text-amber-500">{recruit.race} {recruit.class}</span></div>
+                                                        <h3 className="text-lg font-bold">{recruit.name}</h3>
+                                                        <div className="text-xs text-slate-400 mt-1 grid grid-cols-4 gap-2 w-full">
+                                                            <span title="HP">❤️ {recruit.baseStats.hp}</span>
+                                                            <span title="AP">⚔️ {recruit.baseStats.ap}</span>
+                                                            <span title="DEF">🛡️ {recruit.baseStats.def}</span>
+                                                            <span title="SPD">⚡ {recruit.baseStats.spd}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => recruitUnit(recruit)} className="bg-amber-700 hover:bg-amber-600 px-4 py-2 rounded font-bold text-sm shadow-lg">Hire</button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : <div className="text-center py-12 text-slate-500 italic">The tavern is empty. Come back later.</div>}
+                                </div>
+                                <div className="text-center"><button onClick={() => { const ref = doc(db, 'artifacts', appId, 'users', user.uid, 'system', 'tavern'); refreshTavern(ref); }} className="text-xs text-slate-600 underline mt-4">(Dev: Force Refresh)</button></div>
+                            </div>
+                        )}
+                        {view === 'mission_select' && (
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 mb-4"><button onClick={() => { setView('barracks'); setSelectedTroops([]); }} className="text-slate-400 hover:text-white"><ChevronRight className="rotate-180" /></button><h2 className="text-xl font-bold">Deploy Squad</h2></div>
+                                <div className="bg-amber-900/20 border border-amber-900/50 p-4 rounded-lg mb-6 flex items-start gap-3"><AlertTriangle className="text-amber-500 shrink-0 mt-1" /><div><h3 className="font-bold text-amber-500">Bloblin Patrol</h3><p className="text-xs text-amber-200/70 mt-1">Difficulty: Low • Rewards: XP, Dull Sword</p><p className="text-xs text-slate-400 mt-2 italic">"They're squishy, but they bite."</p></div></div>
+                                <div className="grid gap-2">
+                                    {troops.map(t => {
+                                        const isSelected = selectedTroops.includes(t.uid);
+                                        return (
+                                            <button key={t.uid} onClick={() => setSelectedTroops(p => isSelected ? p.filter(id => id !== t.uid) : p.length < 2 ? [...p, t.uid] : p)} className={`p-3 rounded-lg border flex justify-between items-center transition-all ${isSelected ? 'bg-amber-900/40 border-amber-600' : 'bg-slate-800 border-slate-700'}`}>
+                                                <div className="text-left"><div className="font-bold">{t.name}</div><div className="text-xs text-slate-500">{t.race} {t.class}</div></div>
+                                                <div className={`w-5 h-5 rounded-full border border-slate-600 flex items-center justify-center ${isSelected ? 'bg-amber-600 border-amber-600' : ''}`}>{isSelected && <div className="w-2 h-2 bg-white rounded-full"/>}</div>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                                <button disabled={selectedTroops.length === 0} onClick={startMission} className="w-full bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white font-bold py-4 rounded-lg mt-6 shadow-lg shadow-red-900/20">START OPERATION</button>
+                            </div>
+                        )}
+                        {view === 'combat' && (
+                            <div className="h-full flex flex-col">
+                                <div className="flex justify-between items-center mb-4">
+                                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${gameState === 'fighting' ? 'bg-red-900/50 text-red-200 border border-red-800 animate-pulse' : gameState === 'victory' ? 'bg-green-900/50 text-green-200 border border-green-800' : 'bg-stone-800 text-stone-400'}`}>{gameState === 'fighting' ? 'COMBAT ACTIVE' : gameState.toUpperCase()}</span>
+                                    <button onClick={() => setAutoBattle(!autoBattle)} className={`text-xs font-bold px-3 py-1 rounded border flex items-center gap-1 transition-all ${autoBattle ? 'bg-amber-600 border-amber-500 text-white animate-pulse' : 'bg-slate-800 border-slate-600 text-slate-400'}`}><Repeat size={12} /> Auto: {autoBattle ? 'ON' : 'OFF'}</button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mb-4">
+                                    <div className="space-y-2">
+                                        {combatStateRef.current.troops.map((u, idx) => (
+                                            <div key={idx} className={`p-2 rounded border border-slate-700 bg-slate-800 relative overflow-hidden transition-all ${u.currentHp <= 0 ? 'opacity-40 grayscale blur-[1px]' : ''}`}>
+                                                <div className="flex justify-between items-center z-10 relative"><span className="font-bold text-sm truncate">{u.name}</span><span className="text-xs">{u.currentHp}</span></div>
+                                                {getHpBar(u.currentHp, u.maxHp)}
+                                                <div className="absolute bottom-0 left-0 h-0.5 bg-amber-400 transition-all duration-300" style={{ width: `${u.actionGauge}%`}} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="space-y-2">
+                                        {combatStateRef.current.enemies.map((e, idx) => (
+                                            <div key={idx} className={`p-2 rounded border border-red-900/30 bg-red-900/10 text-right relative overflow-hidden ${e.currentHp <= 0 ? 'opacity-0' : ''} transition-opacity duration-500`}>
+                                                <div className="flex justify-between items-center z-10 relative flex-row-reverse"><span className="font-bold text-sm text-red-300 truncate">{e.name}</span><span className="text-xs text-red-400">{e.currentHp}</span></div>
+                                                {getHpBar(e.currentHp, e.maxHp)}
+                                                <div className="absolute bottom-0 right-0 h-0.5 bg-red-500 transition-all duration-300" style={{ width: `${e.actionGauge}%`}} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex-1 bg-black/40 rounded-lg p-3 overflow-y-auto font-mono text-xs text-slate-300 h-48 border border-slate-800 shadow-inner flex flex-col-reverse">
+                                    {[...combatLog].reverse().map((log, i) => (<div key={i} className={`mb-1 ${log.includes("died") ? "text-red-400 font-bold" : log.includes("VICTORY") ? "text-green-400 font-bold" : ""}`}>{">"} {log}</div>))}
+                                </div>
+                                {gameState !== 'fighting' ? (
+                                    <div className="mt-4 flex flex-col gap-2">
+                                        {gameState === 'victory' && autoBattle && <div className="text-center text-xs text-amber-400 animate-pulse mb-1">Next battle starting soon...</div>}
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setView('barracks'); setGameState('idle'); setCombatLog([]); setSelectedTroops([]); setAutoBattle(false); }} className="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded font-bold text-white shadow-lg">Return to Base</button>
+                                            {gameState === 'victory' && autoBattle && <button onClick={() => setAutoBattle(false)} className="bg-red-900/80 hover:bg-red-800 px-4 rounded font-bold text-red-200 border border-red-700"><PauseCircle /></button>}
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </div>
+                        )}
+                    </main>
+                    <nav className="fixed bottom-0 w-full bg-slate-800 border-t border-slate-700 flex justify-around p-2 pb-safe z-50">
+                        <button onClick={() => setView('barracks')} className={`p-2 rounded flex flex-col items-center gap-1 text-xs ${['barracks', 'tavern', 'character_sheet'].includes(view) ? 'text-amber-500' : 'text-slate-500'}`}><User size={20} /> Base</button>
+                        <button onClick={() => setView('mission_select')} disabled={troops.length === 0} className={`p-2 rounded flex flex-col items-center gap-1 text-xs ${['mission_select', 'combat'].includes(view) ? 'text-red-500' : 'text-slate-500'}`}><Sword size={20} /> Battle</button>
+                    </nav>
+                </div>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
