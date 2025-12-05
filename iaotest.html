@@ -34,7 +34,6 @@
         .animate-fade-in {
             animation: fade-in 0.3s ease-out forwards;
         }
-        /* Hide scrollbar for clean UI in log */
         .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
@@ -55,7 +54,10 @@
             getAuth, 
             signInAnonymously, 
             onAuthStateChanged,
-            signInWithCustomToken
+            signInWithCustomToken,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            signOut
         } from 'firebase/auth';
         import { 
             getFirestore, 
@@ -69,7 +71,7 @@
         import { 
             Shield, Sword, Heart, Zap, UserPlus, Backpack, 
             ChevronRight, User, AlertTriangle, Clock, X, 
-            Hammer, Scroll, Skull, Repeat, PauseCircle 
+            Hammer, Scroll, Skull, Repeat, PauseCircle, LogOut
         } from 'lucide-react';
 
         // ------------------------------------------------------------------
@@ -87,12 +89,14 @@
         } else {
             // MANUAL CONFIGURATION: Paste your keys here for external deployment
             firebaseConfig = {
-                // apiKey: "AIzaSy...",
-                // authDomain: "your-project.firebaseapp.com",
-                // projectId: "your-project",
-                // storageBucket: "your-project.appspot.com",
-                // messagingSenderId: "123456789",
-                // appId: "1:123456789:web:abcdef"
+    apiKey: "AIzaSyCmMdTFe0rjXTMTLZ5Icw73Z1gXOYfHkgk",
+    authDomain: "iaogame.firebaseapp.com",
+    databaseURL: "https://iaogame-default-rtdb.firebaseio.com",
+    projectId: "iaogame",
+    storageBucket: "iaogame.firebasestorage.app",
+    messagingSenderId: "74081285188",
+    appId: "1:74081285188:web:cd954d633fdc648110b811",
+    measurementId: "G-8JZX8ZHNCW"
             };
         }
         // ------------------------------------------------------------------
@@ -187,16 +191,93 @@
             };
         };
 
-        const AuthScreen = () => (
-            <div className="flex items-center justify-center h-screen bg-slate-900 text-slate-200">
-                <div className="text-center animate-pulse">
-                    <Shield className="w-16 h-16 mx-auto mb-4 text-amber-600" />
-                    <h1 className="text-2xl font-bold">Entering the Realm...</h1>
-                    <p className="text-slate-500">Connecting to Guild Archives</p>
-                    {!firebaseConfig || !firebaseConfig.apiKey && <p className="text-red-500 mt-4 text-sm font-mono max-w-md mx-auto">Error: Firebase Config Missing. If running locally, please edit the HTML file to include your API keys.</p>}
+        // --- NEW AUTH SCREEN COMPONENT ---
+        const AuthScreen = () => {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [isSignUp, setIsSignUp] = useState(false);
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleAuth = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+                try {
+                    if (isSignUp) {
+                        await createUserWithEmailAndPassword(auth, email, password);
+                    } else {
+                        await signInWithEmailAndPassword(auth, email, password);
+                    }
+                } catch (err) {
+                    let msg = err.message;
+                    if (msg.includes('auth/invalid-email')) msg = "Invalid email address.";
+                    if (msg.includes('auth/weak-password')) msg = "Password should be at least 6 characters.";
+                    if (msg.includes('auth/invalid-credential')) msg = "Invalid email or password.";
+                    if (msg.includes('auth/email-already-in-use')) msg = "Email already registered.";
+                    setError(msg);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="flex items-center justify-center h-screen bg-slate-900 text-slate-200 p-4">
+                    <div className="w-full max-w-sm bg-slate-800 p-6 rounded-lg border border-slate-700 shadow-xl">
+                        <div className="text-center mb-6">
+                            <Shield className="w-12 h-12 mx-auto mb-2 text-amber-600" />
+                            <h1 className="text-2xl font-bold text-slate-100">Iron & Oil</h1>
+                            <p className="text-slate-500 text-sm">Mercenary Guild Access</p>
+                        </div>
+                        
+                        <form onSubmit={handleAuth} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-1">EMAIL</label>
+                                <input 
+                                    type="email" 
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm focus:border-amber-500 outline-none"
+                                    placeholder="mercenary@guild.com"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-1">PASSWORD</label>
+                                <input 
+                                    type="password" 
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm focus:border-amber-500 outline-none"
+                                    placeholder="••••••••"
+                                    required
+                                />
+                            </div>
+
+                            {error && <div className="text-red-400 text-xs bg-red-900/20 p-2 rounded border border-red-900/50">{error}</div>}
+
+                            <button 
+                                type="submit" 
+                                disabled={loading}
+                                className="w-full bg-amber-700 hover:bg-amber-600 text-white font-bold py-2 rounded transition-colors disabled:opacity-50"
+                            >
+                                {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
+                            </button>
+                        </form>
+
+                        <div className="mt-4 text-center">
+                            <button 
+                                onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
+                                className="text-xs text-slate-400 hover:text-white underline"
+                            >
+                                {isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up"}
+                            </button>
+                        </div>
+                        
+                        {!firebaseConfig.apiKey && <div className="mt-6 text-[10px] text-red-500 font-mono text-center">Config Missing. Edit index.html</div>}
+                    </div>
                 </div>
-            </div>
-        );
+            );
+        };
 
         function App() {
             const [user, setUser] = useState(null);
@@ -218,20 +299,23 @@
 
             useEffect(() => { troopsRef.current = troops; }, [troops]);
 
+            // --- AUTH LOGIC UPDATED ---
             useEffect(() => {
                 const initAuth = async () => {
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    // Only use custom token if provided (AI Environment), otherwise let user log in via form
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        try {
                             await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
+                        } catch (err) {
+                            console.error("Auto-auth failed", err);
                         }
-                    } catch (err) {
-                        console.error("Auth failed:", err);
                     }
                 };
                 initAuth();
-                const unsubscribe = onAuthStateChanged(auth, setUser);
+                
+                const unsubscribe = onAuthStateChanged(auth, (u) => {
+                    setUser(u);
+                });
                 return () => unsubscribe();
             }, []);
 
@@ -491,6 +575,8 @@
             };
 
             const selectedUnit = troops.find(t => t.uid === selectedUnitId);
+
+            // --- IF NO USER, SHOW AUTH SCREEN ---
             if (!user) return <AuthScreen />;
 
             return (
@@ -500,9 +586,10 @@
                             <Shield className="fill-current w-5 h-5" />
                             <span className="font-bold tracking-wider">IRON & OIL</span>
                         </div>
-                        <div className="flex gap-4 text-sm font-mono">
+                        <div className="flex gap-4 items-center text-sm font-mono">
                             <span className="text-yellow-400">🪙 {gold}</span>
                             <span className="text-blue-300 flex items-center gap-1"><Backpack size={14}/> {inventory.length}</span>
+                            <button onClick={() => signOut(auth)} className="text-slate-500 hover:text-red-400 ml-2" title="Log Out"><LogOut size={16} /></button>
                         </div>
                     </header>
                     <main className="p-4 max-w-2xl mx-auto pb-24">
