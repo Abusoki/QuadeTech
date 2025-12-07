@@ -647,8 +647,8 @@
             const rotateClass = `rotate-${rotation}`;
             const isSideways = rotation === 90 || rotation === 270;
             const cardClasses = isWinner 
-                ? `relative flex flex-col h-full rounded-2xl overflow-hidden transition-all duration-300 bg-slate-900 border-2 border-yellow-400 winner-glow min-h-[250px]`
-                : `relative flex flex-col h-full rounded-2xl overflow-hidden transition-all duration-300 ${isDead ? 'opacity-50 grayscale' : ''} ${color} min-h-[250px]`;
+                ? `relative flex flex-col h-full rounded-2xl overflow-hidden transition-all duration-300 bg-slate-900 border-2 border-yellow-400 winner-glow min-h-[220px]`
+                : `relative flex flex-col h-full rounded-2xl overflow-hidden transition-all duration-300 ${isDead ? 'opacity-50 grayscale' : ''} ${color} min-h-[220px]`;
 
             return (
                 <div className={cardClasses}>
@@ -667,7 +667,7 @@
                             </div>
                             <div className="flex items-center gap-2">{isLocal && <div className="w-8 h-8"></div>}{milled && <Icons.Book className="text-blue-400 w-5 h-5 drop-shadow-md" />}{isDead && <Icons.Skull className="text-red-500 w-6 h-6 animate-pulse" />}{isWinner && <Icons.Crown className="text-yellow-400 w-6 h-6 animate-bounce" />}</div>
                         </div>
-                        <div className={`flex-1 flex flex-col items-center justify-center ${isSideways ? 'py-1' : 'py-4'}`}>
+                        <div className={`flex-1 flex flex-col items-center justify-center ${isSideways ? 'py-1' : 'py-2'}`}>
                             <div className="flex items-center gap-6">
                                 <button onClick={() => adjustLife(-1)} className="w-12 h-12 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-sm active:scale-95 transition-all"><span className="text-3xl font-light mb-1">-</span></button>
                                 <div className="flex flex-col items-center">
@@ -713,9 +713,13 @@
                                 <button onClick={() => adjustLife(1)} className="w-12 h-12 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-sm active:scale-95 transition-all"><span className="text-3xl font-light mb-1">+</span></button>
                             </div>
                         </div>
-                        <div className="flex flex-col items-center space-y-3 relative">
+                        <div className="flex flex-col items-center space-y-1 relative pb-2">
                             <div className="flex justify-center gap-3">{[-10, -5, 5, 10].map(amt => (<button key={amt} onClick={() => adjustLife(amt)} className="px-3 py-1 bg-black/20 hover:bg-black/40 rounded-lg text-white/80 text-xs font-bold backdrop-blur-sm">{amt > 0 ? '+' : ''}{amt}</button>))}</div>
-                            <div className="flex items-center gap-2"><button onClick={() => setShowTools(true)} className="flex items-center gap-1 text-xs bg-slate-700/80 hover:bg-slate-600/80 text-white font-bold px-3 py-2 rounded-xl backdrop-blur-md transition-colors shadow-md"><Icons.Sliders className="w-4 h-4" /> Counters</button></div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setShowTools(true)} className="flex items-center gap-1 text-xs bg-slate-700/80 hover:bg-slate-600/80 text-white font-bold px-3 py-1.5 rounded-xl backdrop-blur-md transition-colors shadow-md">
+                                    <Icons.Sliders className="w-4 h-4" /> Counters
+                                </button>
+                            </div>
                         </div>
                          {commander?.artist && (<div className="absolute bottom-1 right-2 text-[10px] text-white/40 font-medium pointer-events-none text-right leading-tight"><div>Art by {commander.artist}</div><div>™ & © Wizards of the Coast</div></div>)}
                     </div>
